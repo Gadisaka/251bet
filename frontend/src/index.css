@@ -1,0 +1,189 @@
+@import url("https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap");
+@import "tailwindcss";
+
+/*
+  Digitain-style sportsbook tokens (m.bet251.net IA / chrome).
+  Do not copy Bet251 assets. Brand name stays 251Bet.
+  Header ~48px, top tabs ~34px, bottom bar ~54px, compact 1-X-2 rows.
+*/
+@layer base {
+  :root {
+    font-family: "Roboto", "Helvetica Neue", Arial, sans-serif;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    --sb-bg-0: #000000;
+    --sb-bg-1: #0e0e0e;
+    --sb-bg-2: #1a1a1a;
+    --sb-bg-page: #0e0e0e;
+    --sb-bg-card: #1a1a1a;
+    --sb-bg-card-elevated: #212121;
+    --sb-surface: #1a1a1a;
+    --sb-surface-soft: #212121;
+    --sb-border: rgba(255, 255, 255, 0.08);
+    --sb-border-strong: rgba(255, 255, 255, 0.16);
+    --sb-text: #ffffff;
+    --sb-text-muted: #9a9a9a;
+    --sb-accent: #f5c518;
+    --sb-accent-soft: #ffe27a;
+    --sb-positive: #12a150;
+    --sb-accent-fill: #f5c518;
+    --sb-accent-fill-hover: #ffd633;
+    --sb-accent-border: #f5c518;
+    --sb-accent-surface: #2a2410;
+    --sb-accent-surface-deep: #1e1a0b;
+    --sb-accent-surface-alt: #352d12;
+    --sb-accent-text-on-dark: #101010;
+    --sb-accent-text-muted: #ffe27a;
+    --sb-accent-text-soft: #ffe27a;
+    --sb-live: #e5383b;
+    --sb-odd: #1f1f1f;
+
+    /* Chrome */
+    --sb-header: #132039;
+    --sb-nav: #132039;
+    --sb-header-border: rgba(255, 255, 255, 0.06);
+    --sb-odds: #f5c518;
+    --sb-bottom-bar: #0e0e0e;
+
+    /* Per-sport accordion header colors */
+    --sb-sport-football: #12a150;
+    --sb-sport-basketball: #e6a817;
+    --sb-sport-tennis: #8f9a2e;
+    --sb-sport-volleyball: #1f7ae0;
+    --sb-sport-tabletennis: #14a3a3;
+    --sb-sport-cricket: #a24bd6;
+    --sb-sport-default: #2f3d55;
+  }
+
+  html,
+  body,
+  #root {
+    @apply m-0 min-h-full max-w-full;
+  }
+
+  body {
+    @apply overflow-x-clip;
+    background: var(--sb-bg-page);
+    color: var(--sb-text);
+  }
+
+  body {
+    @apply min-w-[320px];
+  }
+}
+
+@layer components {
+  .sb-card {
+    background: var(--sb-bg-card);
+    box-shadow: none;
+  }
+
+  .sportsbook-surface {
+    background: var(--sb-bg-card);
+    border: 1px solid var(--sb-border);
+    box-shadow: none;
+  }
+}
+
+@layer utilities {
+  @keyframes deposit-panel-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-deposit-panel {
+    animation: deposit-panel-in 0.28s ease-out both;
+  }
+
+  @keyframes bet-slip-row-enter {
+    0% {
+      opacity: 0;
+      transform: translateX(-12px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .animate-bet-slip-row-enter {
+    animation: bet-slip-row-enter 0.28s ease-out both;
+  }
+}
+
+/* Public check-coupon: scalloped "torn paper" top & bottom edges on the receipt
+   card. The mask punches half-circles out of the card so the dark page shows
+   through, mimicking a perforated thermal receipt. Keep vertical padding >= 8px
+   so content is never clipped by the notches. */
+.coupon-receipt {
+  -webkit-mask:
+    radial-gradient(circle at 50% 0, transparent 7px, #000 7.5px) repeat-x 0 0 /
+      15px 51%,
+    radial-gradient(circle at 50% 100%, transparent 7px, #000 7.5px) repeat-x 0
+      100% / 15px 51%;
+  mask:
+    radial-gradient(circle at 50% 0, transparent 7px, #000 7.5px) repeat-x 0 0 /
+      15px 51%,
+    radial-gradient(circle at 50% 100%, transparent 7px, #000 7.5px) repeat-x 0
+      100% / 15px 51%;
+}
+
+.coupon-receipt__ticket-status--won {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.coupon-receipt__ticket-status--lost {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.coupon-receipt__ticket-status--pending {
+  background: #f59e0b;
+  color: #111111;
+}
+
+.coupon-receipt__ticket-status--cancelled {
+  background: #475569;
+  color: #ffffff;
+}
+
+.coupon-receipt__leg--won {
+  background: #bbf7d0;
+  box-shadow: inset 4px 0 0 #16a34a;
+  color: #14532d;
+}
+
+.coupon-receipt__leg--lost {
+  background: #fecaca;
+  box-shadow: inset 4px 0 0 #dc2626;
+  color: #7f1d1d;
+}
+
+.coupon-receipt__leg--postponed {
+  background: #fde68a;
+  box-shadow: inset 4px 0 0 #f59e0b;
+  color: #78350f;
+}
+
+.coupon-receipt__leg--notplayed {
+  background: transparent;
+  color: #0a0a0a;
+}
+
+.coupon-receipt__summary-highlight {
+  background: #0f6b35;
+  color: #ffffff;
+  box-shadow: inset 4px 0 0 #22c55e;
+}
+
+.coupon-receipt__summary-highlight span {
+  color: inherit;
+}
