@@ -578,12 +578,11 @@ export const mockLiveMatches = Object.freeze([
   }),
 ]);
 
-/**
- * Casino rail placeholders. Artwork is a generated gradient rather than any
- * provider asset, so tiles are ours while the layout matches the reference.
- */
-function tile(id, title, provider, from, to) {
-  return { id, title, provider, gradient: `linear-gradient(145deg, ${from}, ${to})` };
+/** Public InOut icon CDN — same host the home quick-play tiles already use. */
+const ICON = "https://icons.inout.games";
+
+function tile(id, title, provider, icon) {
+  return { id, title, provider, iconUrl: `${ICON}/${icon}` };
 }
 
 export const mockCasinoRails = Object.freeze([
@@ -592,16 +591,22 @@ export const mockCasinoRails = Object.freeze([
     titleKey: "casino.trending",
     overflow: 7402,
     games: [
-      tile("keno-36", "Keno 36", "MRX", "#1b3b6f", "#0a1020"),
-      tile("multi-hot", "Multi Hot 5", "Pragmatic", "#7a1f1f", "#20090a"),
-      tile("royal-fruits", "Royal Fruits", "Evoplay", "#4b1d7a", "#150a24"),
-      tile("royal-flash", "Royal Flash", "Evoplay", "#8a5a12", "#241606"),
-      tile("avi", "Avi", "Spribe", "#0f5a4a", "#041a16"),
-      tile("king-sky", "King Of The Sky", "Booongo", "#12507a", "#04141f"),
-      tile("bun-bonus", "Bun Bonus", "Pragmatic", "#8a6a10", "#231a05"),
-      tile("fortune-tarta", "Fortune Tarta", "Booongo", "#1f6b2f", "#06180b"),
-      tile("money-tree", "Money Tree", "Pragmatic", "#7a5c0f", "#1f1704"),
-      tile("hot-100", "Hot 100", "Amatic", "#7a1436", "#20060f"),
+      tile("keno-36", "Keno", "InOut", "io_keno.png"),
+      tile("chicken-road-2", "Chicken Road 2", "InOut", "io_chiken-road-2.png"),
+      tile("chicken-coin", "Chicken Coin", "InOut", "io_chicken_coin.png"),
+      tile("megablock", "Mega Block", "InOut", "io_megablock.png"),
+      tile("crash", "Crash", "InOut", "io_crash.png"),
+      tile("plinko", "Plinko", "InOut", "io_plinko.png"),
+      tile("mines", "Mines", "InOut", "io_mines.png"),
+      tile("limbo", "Limbo", "InOut", "io_limbo.png"),
+      tile("wheel", "Wheel", "InOut", "io_wheel.png"),
+      tile("coinflip", "Coin Flip", "InOut", "io_coinflip.png"),
+      tile("frog-jump", "Frog Jump", "InOut", "io_frog-jump.png"),
+      tile("wheel-out", "Wheel Out", "InOut", "io_wheel-out.png"),
+      tile("chicken-shoot", "Chicken Shoot", "InOut", "io_chicken-shoot.png"),
+      tile("chicken-banana", "Chicken Banana", "InOut", "io_chicken-banana.png"),
+      tile("chicken-royal", "Chicken Royal", "InOut", "io_chicken_royal.png"),
+      tile("jumper", "Jumper", "InOut", "io_jumper.png"),
     ],
   },
   {
@@ -609,10 +614,21 @@ export const mockCasinoRails = Object.freeze([
     titleKey: "casino.casinoGames",
     overflow: 7402,
     games: [
-      tile("chicky", "Chicky Choice", "InOut", "#8a4a10", "#231205"),
-      tile("moneytree-2", "Money Tree", "Pragmatic", "#6b5a0f", "#1b1604"),
-      tile("tarta-2", "Fortune Tarta", "Booongo", "#1f6b57", "#061815"),
-      tile("tornado", "Tornado x5000", "Evoplay", "#2a2f7a", "#080a20"),
+      tile("chicky", "Chicken Road 2", "InOut", "io_chiken-road-2.png"),
+      tile("tower", "Tower", "InOut", "io_tower.png"),
+      tile("stairs", "Stairs", "InOut", "io_stairs.png"),
+      tile("double", "Double", "InOut", "io_double.png"),
+      tile("goblin-tower", "Goblin Tower", "InOut", "io_goblin-tower.png"),
+      tile("bubbles", "Bubbles", "InOut", "io_bubbles.png"),
+      tile("triple", "Triple", "InOut", "io_triple.png"),
+      tile("diver", "Diver", "InOut", "io_diver.png"),
+      tile("ballonix", "BalloniX", "InOut", "io_ballonix.png"),
+      tile("forest-arrow", "Forest Arrow", "InOut", "io_forest-arrow.png"),
+      tile("rps", "Rock Paper Scissors", "InOut", "io_rock-paper-scissors.png"),
+      tile("jogo-do-bicho", "Jogo Do Bicho", "InOut", "io_jogo-do-bicho.png"),
+      tile("sugar-daddy", "Sugar Daddy", "InOut", "io_sugar-daddy.png"),
+      tile("cryptos", "Cryptos", "InOut", "io_cryptos.png"),
+      tile("joker-pyre", "Joker Pyre", "InOut", "io_joker_pyre.png"),
     ],
   },
   {
@@ -620,10 +636,18 @@ export const mockCasinoRails = Object.freeze([
     titleKey: "casino.liveCasino",
     overflow: 161,
     games: [
-      tile("roulette", "Live Roulette", "Evolution", "#1f5c2f", "#07170c"),
-      tile("swahili", "Swahili Blackjack", "Evolution", "#4a3a1a", "#150f06"),
-      tile("baccarat", "Speed Baccarat", "Ezugi", "#6b1a2a", "#1b070c"),
-      tile("baccarat-k", "Baccarat Korea", "Ezugi", "#2a2a6b", "#0a0a1b"),
+      tile("roulette", "Roulette", "InOut", "io_roulette.png"),
+      tile("crash-live", "Crash", "InOut", "io_crash.png"),
+      tile("wheel-live", "Wheel", "InOut", "io_wheel.png"),
+      tile("keno-live", "Keno", "InOut", "io_keno.png"),
+      tile("wheel-out-live", "Wheel Out", "InOut", "io_wheel-out.png"),
+      tile("avia-fly", "Avia Fly", "InOut", "io_aviafly.png"),
+      tile("penalty-cup", "Penalty Nations Cup", "InOut", "io_penalty-nations-cup.png"),
+      tile("plinko-1000", "Plinko 1000", "InOut", "io_plinko1000.png"),
+      tile("lucky-mines", "Lucky Mines", "InOut", "io_lucky-mines.png"),
+      tile("hot-mines", "Hot Mines", "InOut", "io_hot-mines.png"),
+      tile("mine-slot", "Mine Slot", "InOut", "io_mineslot.png"),
+      tile("twist", "Twist", "InOut", "io_twist.png"),
     ],
   },
   {
@@ -631,10 +655,20 @@ export const mockCasinoRails = Object.freeze([
     titleKey: "casino.popularGames",
     overflow: 96,
     games: [
-      tile("moneytree-3", "Money Tree", "Pragmatic", "#7a6a12", "#201b05"),
-      tile("tarta-3", "Fortune Tarta", "Booongo", "#186b3f", "#051810"),
-      tile("tornado-2", "Tornado x5000", "Evoplay", "#3a2a7a", "#0e0a20"),
-      tile("ultraspin", "Ultra Spin", "Amatic", "#7a4a1a", "#201206"),
+      tile("plinko-pop", "Plinko", "InOut", "io_plinko.png"),
+      tile("mines-pop", "Mines", "InOut", "io_mines.png"),
+      tile("chicken-pop", "Chicken Coin", "InOut", "io_chicken_coin.png"),
+      tile("mega-pop", "Mega Block", "InOut", "io_megablock.png"),
+      tile("chicken-road-pop", "Chicken Road", "InOut", "io_chicken-road.png"),
+      tile("chicken-gold", "Chicken Road Gold", "InOut", "io_chicken-road-gold.png"),
+      tile("cricket-road", "Cricket Road", "InOut", "io_cricket-road.png"),
+      tile("rabbit-road", "Rabbit Road", "InOut", "io_rabbit-road.png"),
+      tile("hamster-run", "Hamster Run", "InOut", "io_hamster-run.png"),
+      tile("fish-boom", "Fish Boom", "InOut", "io_fish-boom.png"),
+      tile("pengu-sport", "Pengu Sport", "InOut", "io_pengu-sport.png"),
+      tile("topo-mole", "Topo Mole", "InOut", "io_topo-mole.png"),
+      tile("chicken-shoot-pop", "Chicken Shoot", "InOut", "io_chicken-shoot.png"),
+      tile("chicken-banana-pop", "Chicken Banana", "InOut", "io_chicken-banana.png"),
     ],
   },
   {
@@ -642,10 +676,18 @@ export const mockCasinoRails = Object.freeze([
     titleKey: "casino.newGames",
     overflow: 232,
     games: [
-      tile("wild-north", "Wild North", "Playngo", "#1a4a7a", "#061320"),
-      tile("gold-rush", "Gold Rush", "Booongo", "#7a6212", "#201905"),
-      tile("aztec-sun", "Aztec Sun", "Pragmatic", "#7a3312", "#200d05"),
-      tile("neon-dice", "Neon Dice", "Spribe", "#6b127a", "#1b0520"),
+      tile("frog-jump-new", "Frog Jump", "InOut", "io_frog-jump.png"),
+      tile("wheel-out-new", "Wheel Out", "InOut", "io_wheel-out.png"),
+      tile("joker-pyre-new", "Joker Pyre", "InOut", "io_joker_pyre.png"),
+      tile("squid-gamebler", "Squid Gamebler", "InOut", "io_squid-gamebler.png"),
+      tile("jumper-new", "Jumper", "InOut", "io_jumper.png"),
+      tile("twist-new", "Twist", "InOut", "io_twist.png"),
+      tile("chicken-royal-new", "Chicken Royal", "InOut", "io_chicken_royal.png"),
+      tile("penalty-new", "Penalty Nations Cup", "InOut", "io_penalty-nations-cup.png"),
+      tile("mine-slot-new", "Mine Slot", "InOut", "io_mineslot.png"),
+      tile("plinko-1000-new", "Plinko 1000", "InOut", "io_plinko1000.png"),
+      tile("goblin-new", "Goblin Tower", "InOut", "io_goblin-tower.png"),
+      tile("diver-new", "Diver", "InOut", "io_diver.png"),
     ],
   },
 ]);

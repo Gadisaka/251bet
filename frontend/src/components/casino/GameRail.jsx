@@ -1,8 +1,8 @@
 import AppIcon from "../common/AppIcon";
 
 const SIZE_CLASS = {
-  rail: "w-[112px] shrink-0 aspect-[4/3]",
-  featured: "min-w-0 w-full aspect-[4/3]",
+  rail: "w-[92px] shrink-0 aspect-[3/4] sm:w-[104px]",
+  featured: "w-[92px] shrink-0 aspect-[3/4] sm:w-[104px]",
   sm: "w-full aspect-square",
   lg: "w-full aspect-[3/4]",
 };
@@ -70,19 +70,16 @@ export function GameRail({ title, overflow, games, onPlay, onMore, featured = fa
           </button>
         ) : null}
       </div>
-      {featured ? (
-        <div className="grid grid-cols-4 gap-1.5 px-2">
-          {games.map((game) => (
-            <GameCard key={game.id} game={game} onPlay={onPlay} size="featured" />
-          ))}
-        </div>
-      ) : (
-        <div className="flex gap-1.5 overflow-x-auto px-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {games.map((game) => (
-            <GameCard key={game.id} game={game} onPlay={onPlay} size="rail" />
-          ))}
-        </div>
-      )}
+      <div className="flex gap-2 overflow-x-auto px-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {games.map((game) => (
+          <GameCard
+            key={game.id}
+            game={game}
+            onPlay={onPlay}
+            size={featured ? "featured" : "rail"}
+          />
+        ))}
+      </div>
     </section>
   );
 }

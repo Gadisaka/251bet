@@ -502,7 +502,6 @@ function Home() {
           center={
             <>
               <HeroBanner />
-              <HomeCasinoRails />
               <HomeDiscoverSections
                 popularMatches={popularMatches}
                 liveMatches={mockLiveMatches}
@@ -563,6 +562,7 @@ function Home() {
                   onSelectDay={handleNextCalendarDay}
                 />
               ) : null}
+              <HomeCasinoRails />
             </>
           }
         />
