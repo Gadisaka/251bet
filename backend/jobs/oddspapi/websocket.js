@@ -1,3 +1,4 @@
+import WebSocket from "ws";
 import { getCache, setCache } from "../../services/cacheService.js";
 import {
   getOddspapiConfig,
@@ -53,14 +54,14 @@ async function applyMessage(msg) {
   await prisma.fixture.update({ where: { id: existing.id }, data: patch });
 }
 
-async function openSocket() {
+function openSocket() {
   const cfg = getOddspapiConfig();
-  const Impl = globalThis.WebSocket;
-  if (!Impl) {
-    console.warn("[oddspapi:ws] no WebSocket implementation in this runtime");
+  if (!cfg.apiKey) {
+    console.warn("[oddspapi:ws] missing ODDSPAPI_API_KEY");
     return null;
   }
-  return new Impl(`${cfg.wsUrl}?apiKey=${cfg.apiKey}`);
+  // Node 20 has no global WebSocket; the `ws` package does.
+  return new WebSocket(`${cfg.wsUrl}?apiKey=${cfg.apiKey}`);
 }
 
 function scheduleReconnect(delayMs) {
@@ -78,18 +79,18 @@ function scheduleReconnect(delayMs) {
 export async function connect() {
   if (!isOddspapiShadowEnabled() || !getOddspapiConfig().wsEnabled) return;
   stopRequested = false;
-  const ws = await openSocket();
+  const ws = openSocket();
   if (!ws) return;
   socket = ws;
 
-  ws.addEventListener("open", () => {
+  ws.on("open", () => {
     stats.openedAt = new Date().toISOString();
     console.log("[oddspapi:ws] connected (deltas only — REST reseed required after reconnect)");
   });
-  ws.addEventListener("message", (ev) => {
+  ws.on("message", (data) => {
     stats.messages += 1;
     stats.lastMessageAt = new Date().toISOString();
-    const raw = typeof ev.data === "string" ? ev.data : ev.data?.toString?.();
+    const raw = typeof data === "string" ? data : data?.toString?.();
     if (!raw || raw[0] !== "{") return;
     let msg;
     try {
@@ -101,12 +102,13 @@ export async function connect() {
       console.warn("[oddspapi:ws] apply failed:", err.message);
     });
   });
-  ws.addEventListener("close", () => {
+  ws.on("close", () => {
     console.warn("[oddspapi:ws] closed");
+    socket = null;
     if (!stopRequested) scheduleReconnect(2000);
   });
-  ws.addEventListener("error", () => {
-    /* close handler reconnects */
+  ws.on("error", (err) => {
+    console.warn("[oddspapi:ws] error:", err.message);
   });
 }
 
