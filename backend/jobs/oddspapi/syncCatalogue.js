@@ -26,12 +26,17 @@ export async function runOddspapiCatalogue() {
   );
   const map = {};
   for (const row of soccer) {
+    const outcomes = {};
+    for (const o of row.outcomes || []) {
+      outcomes[String(o.outcomeId)] = o.outcomeName;
+    }
     map[String(row.marketId)] = {
       marketName: row.marketName,
       marketType: row.marketType,
       period: row.period,
       handicap: row.handicap,
       playerProp: Boolean(row.playerProp),
+      outcomes,
     };
   }
   await cacheMarkets(map);

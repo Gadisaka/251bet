@@ -4,6 +4,7 @@ import {
   runOddspapiFixturesLookback,
 } from "../../jobs/oddspapi/syncFixtures.js";
 import { runOddspapiOdds } from "../../jobs/oddspapi/syncOdds.js";
+import { runOddspapiSettlementShadow } from "../../jobs/oddspapi/settlementShadow.js";
 import { getFixturesDaysAhead } from "../../Config/ingestionConfig.js";
 import { isOddspapiShadowEnabled } from "../../services/providers/oddspapi/config.js";
 
@@ -34,6 +35,8 @@ export async function processOddspapiShadow(job) {
       return runOddspapiOdds({ tier: "warm" });
     case "oddspapi:odds-cold":
       return runOddspapiOdds({ tier: "cold" });
+    case "oddspapi:settlement-shadow":
+      return runOddspapiSettlementShadow(job.data || {});
     default:
       throw new Error(`unknown oddspapi job ${name}`);
   }

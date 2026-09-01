@@ -48,6 +48,11 @@ function envDays(name, fallback) {
   return Number.isFinite(v) && v > 0 ? v * DAYS : fallback;
 }
 
+function envNumber(name, fallback) {
+  const v = Number(process.env[name]);
+  return Number.isFinite(v) && v > 0 ? v : fallback;
+}
+
 /**
  * BullMQ rejects custom `jobId` values that contain ":" because it uses ":"
  * as the Redis key separator. We keep the descriptive colon-separated names
@@ -253,6 +258,19 @@ function buildRepeatables() {
         opts: {
           repeat: { every: envMinutes("ODDSPAPI_ODDS_COLD_MINUTES", 6 * 60 * MINUTES) },
           jobId: toJobId(REPEATABLE_JOB_NAMES.ODDSPAPI_ODDS_COLD),
+        },
+      },
+      {
+        queue: q,
+        name: REPEATABLE_JOB_NAMES.ODDSPAPI_SETTLEMENT_SHADOW,
+        // Read-only comparison against our own grader. Paced by the 2s
+        // settlements cooldown, so a batch of 25 costs ~1 minute of wall time.
+        data: { limit: envNumber("ODDSPAPI_SETTLEMENT_SHADOW_BATCH", 25) },
+        opts: {
+          repeat: {
+            every: envMinutes("ODDSPAPI_SETTLEMENT_SHADOW_MINUTES", 30 * MINUTES),
+          },
+          jobId: toJobId(REPEATABLE_JOB_NAMES.ODDSPAPI_SETTLEMENT_SHADOW),
         },
       },
     );

@@ -6,6 +6,7 @@ import {
   mapStatusId,
   parseProviderFixtureId,
 } from "../../services/providers/oddspapi/config.js";
+import { normalizeScores } from "../../services/providers/oddspapi/normalize.js";
 import prisma from "../../Config/db.js";
 
 const LIVE_KEY = (id) => `oddspapi:ws:${id}`;
@@ -17,16 +18,17 @@ let reconnectTimer = null;
 let stats = { messages: 0, openedAt: null, lastMessageAt: null, reconnects: 0 };
 
 function mergeScore(msg) {
-  const periods = msg.scores?.periods || msg.scores;
-  if (!periods || typeof periods !== "object") return null;
-  const keys = Object.keys(periods).filter((k) => periods[k]?.participant1Score != null);
-  if (!keys.length) return null;
-  const last = keys.sort((a, b) => Number(a) - Number(b)).at(-1);
-  const row = periods[last];
-  return {
-    home_score: Number(row.participant1Score),
-    away_score: Number(row.participant2Score),
-  };
+  const { fullTime, halfTime } = normalizeScores(msg);
+  const patch = {};
+  if (fullTime) {
+    patch.home_score = fullTime.home;
+    patch.away_score = fullTime.away;
+  }
+  if (halfTime) {
+    patch.ht_home_score = halfTime.home;
+    patch.ht_away_score = halfTime.away;
+  }
+  return Object.keys(patch).length ? patch : null;
 }
 
 async function applyMessage(msg) {

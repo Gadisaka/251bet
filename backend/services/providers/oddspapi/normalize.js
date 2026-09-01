@@ -99,6 +99,33 @@ export function flattenOdds(raw, bookmakerSlug) {
   return { suspended: book.suspended === true, lines };
 }
 
+/**
+ * `/v4/scores` and the WebSocket both return periods keyed by NAME, not index:
+ * `result` (incl. overtime), `p1`, `p2`, `fulltime`. These are the same period
+ * tokens the market catalogue uses.
+ *
+ * `fulltime` is the 90' score our graders settle on; `result` includes
+ * overtime and must not be substituted for it.
+ *
+ * @returns {{ fullTime: {home,away}|null, halfTime: {home,away}|null, result: {home,away}|null }}
+ */
+export function normalizeScores(raw) {
+  const periods = raw?.scores?.periods || raw?.periods || raw?.scores || null;
+  const read = (key) => {
+    const row = periods?.[key];
+    if (!row) return null;
+    const home = Number(row.participant1Score);
+    const away = Number(row.participant2Score);
+    if (!Number.isInteger(home) || !Number.isInteger(away)) return null;
+    return { home, away };
+  };
+  return {
+    fullTime: read("fulltime"),
+    halfTime: read("p1"),
+    result: read("result"),
+  };
+}
+
 export function marketStorageName(marketId, catalogueName) {
   const id = Number(marketId);
   const name = catalogueName ? String(catalogueName) : "market";
