@@ -39,6 +39,7 @@ export const REPEATABLE_JOB_NAMES = {
   ODDSPAPI_ODDS_WARM: "oddspapi:odds-warm",
   ODDSPAPI_ODDS_COLD: "oddspapi:odds-cold",
   ODDSPAPI_SETTLEMENT_SHADOW: "oddspapi:settlement-shadow",
+  ODDSPAPI_REAP_STALE_LIVE: "oddspapi:reap-stale-live",
 };
 
 const DEFAULT_JOB_OPTIONS = {

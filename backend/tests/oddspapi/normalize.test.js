@@ -12,6 +12,7 @@ import {
   flattenOdds,
   fixtureWindows,
   marketStorageName,
+  mergeScorePeriods,
   normalizeFixture,
 } from "../../services/providers/oddspapi/normalize.js";
 import { asList } from "../../services/providers/oddspapi/client.js";
@@ -118,6 +119,67 @@ test("flattenOdds keeps player props and 1xbet prices", () => {
   assert.equal(prop.price, 1.5);
 });
 
+test("flattenOdds keeps changedAt and marks inactive when marketActive is false", () => {
+  const { lines, suspended } = flattenOdds(
+    {
+      bookmakerOdds: {
+        "1xbet": {
+          suspended: false,
+          markets: {
+            101: {
+              marketActive: false,
+              outcomes: {
+                101: {
+                  players: {
+                    0: {
+                      price: 4.61,
+                      active: true,
+                      bookmakerOutcomeId: "home",
+                      changedAt: "2026-09-01T18:00:00.000Z",
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "1xbet",
+  );
+  assert.equal(suspended, false);
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].active, false);
+  assert.equal(lines[0].changedAt, "2026-09-01T18:00:00.000Z");
+});
+
+test("flattenOdds marks every line inactive when the book is suspended", () => {
+  const { lines, suspended } = flattenOdds(
+    {
+      bookmakerOdds: {
+        "1xbet": {
+          suspended: true,
+          markets: {
+            101: {
+              marketActive: true,
+              outcomes: {
+                101: {
+                  players: {
+                    0: { price: 1.9, active: true, bookmakerOutcomeId: "home" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "1xbet",
+  );
+  assert.equal(suspended, true);
+  assert.equal(lines[0].active, false);
+});
+
 test("marketStorageName keeps marketId unique per fixture", () => {
   assert.equal(marketStorageName(101, "Full Time Result"), "101:Full Time Result");
 });
@@ -187,4 +249,32 @@ test("mergeBookmakerOdds deep-merges a single outcome delta", () => {
   const merged = mergeBookmakerOdds(prev, patch);
   assert.equal(merged["1xbet"].markets[101].outcomes[101].players[0].price, 2.05);
   assert.equal(merged["1xbet"].markets[101].outcomes[102].players[0].price, 3.4);
+});
+
+test("mergeScorePeriods keeps p1 when a later frame only has result", () => {
+  const seeded = {
+    scores: {
+      periods: {
+        p1: {
+          participant1Score: 1,
+          participant2Score: 0,
+          startedAt: "2026-09-01T14:00:00Z",
+        },
+      },
+    },
+  };
+  const delta = {
+    scores: {
+      periods: {
+        result: {
+          participant1Score: 2,
+          participant2Score: 0,
+          startedAt: "2026-09-01T14:00:00Z",
+        },
+      },
+    },
+  };
+  const merged = mergeScorePeriods(seeded, delta);
+  assert.equal(merged.periods.p1.participant1Score, 1);
+  assert.equal(merged.periods.result.participant1Score, 2);
 });

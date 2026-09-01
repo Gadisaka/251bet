@@ -53,7 +53,16 @@ export function buildMarketsInclude(
       : undefined,
     ...(includeBookmaker
       ? { include: { bookmaker: true } }
-      : { select: { id: true, value: true, odd: true, bookmaker_id: true } }),
+      : {
+          select: {
+            id: true,
+            value: true,
+            odd: true,
+            bookmaker_id: true,
+            active: true,
+            changed_at: true,
+          },
+        }),
   };
   if (Number.isFinite(oddLineLimit) && oddLineLimit > 0) {
     oddLines.take = oddLineLimit;

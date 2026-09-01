@@ -33,9 +33,11 @@ function OddsGrid({
             key={`${marketLabel}-${odd.id}`}
             label={meta.displayLabel || meta.label}
             value={odd.value}
+            suspended={odd.suspended === true}
             layout="stacked"
             selected={selectedOdds?.has(selectionId)}
-            onClick={() =>
+            onClick={() => {
+              if (odd.suspended) return;
               onOddsClick?.({
                 id: selectionId,
                 apiFixtureId,
@@ -49,8 +51,8 @@ function OddsGrid({
                 kickoffAt,
                 matchStatus,
                 fromLive,
-              })
-            }
+              });
+            }}
             className="min-h-[44px]"
           />
         );

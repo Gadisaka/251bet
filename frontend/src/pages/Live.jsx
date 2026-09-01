@@ -37,92 +37,38 @@ import {
 } from "../utils/betSlipPersistence";
 import { pruneExpiredSlips } from "../utils/selectionExpiry";
 import { slicePageItems } from "../utils/pagination";
+import {
+  isLiveDoubleChanceMarket,
+  isLiveLineSuspended,
+  isLiveMainMarketCategory,
+  pickBestLiveThreeWayMarket,
+} from "../utils/liveThreeWayMarket";
 
 const LIVE_REFRESH_MS = 10_000;
 const BET_SLIP_PRUNE_MS = 15_000;
 const LIVE_MARKETS = ["1", "x", "2"];
 
-/** Interval / clock-slice markets (not full-match 1X2). */
-function isLiveOddsWindowOrIntervalMarket(nameRaw) {
-  const n = String(nameRaw || "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!n) return false;
-
+/** Game clock from OddsPapi-derived elapsed / period (not a market name). */
+function liveClockLabel(match) {
+  const statusLabel = String(
+    match?.liveStatus || match?.status || "",
+  ).toUpperCase();
+  const period = String(match?.livePeriod || "").toUpperCase();
   if (
-    /\b\d{1,3}\s*(min|mins|minute|minutes)\b/.test(n) ||
-    /\bin\s+\d{1,3}\s*(min|mins|minute|minutes)\b/.test(n) ||
-    /\b(from|until|next)\s+\d{1,3}(\s*(min|mins|minute|minutes))?\b/.test(n) ||
-    /\b\d{1,2}\s*['′]/.test(n) ||
-    /\b1x2\b.*[-–—]\s*\d/.test(n) ||
-    /\b1x2\b.*\b\d{1,3}\s*(min|mins)\b/.test(n)
+    statusLabel === "HT" ||
+    period === "HT" ||
+    statusLabel.includes("HALF TIME") ||
+    statusLabel.includes("HALFTIME")
   ) {
-    return true;
+    return "HT";
   }
-
-  if (
-    /\b(first|1st|second|2nd)\s+half\b/.test(n) ||
-    /\bhalf\s*time\b(?!\s*full\b)/.test(n) ||
-    /\b15\s*minutes\b|\b10\s*minutes\b|\b30\s*minutes\b|\b40\s*minutes\b|\b45\s*minutes\b|\b60\s*minutes\b/.test(
-      n,
-    )
-  ) {
-    return true;
+  if (match?.elapsedSeconds) return match.elapsedSeconds;
+  if (match?.elapsed != null && match.elapsed !== "") {
+    return `${match.elapsed}'`;
   }
-
-  return false;
-}
-
-/** Full-match 1X2 only (excludes "1X2 - 15 minutes", "1x2 in 40 minutes", etc.). */
-function isLiveThreeWayResultMarket(nameRaw) {
-  if (isLiveOddsWindowOrIntervalMarket(nameRaw)) return false;
-
-  const trimmed = String(nameRaw || "").trim();
-  const n = trimmed.toLowerCase().replace(/\s+/g, " ");
-
-  if (/\b(first|1st|second|2nd)\s+half\b/.test(n)) return false;
-  if (/\bhalf\s*time\b/.test(n) && !/full\s*time/.test(n)) return false;
-
-  if (
-    n.includes("match winner") ||
-    n.includes("fulltime result") ||
-    n.includes("full time result") ||
-    (n.includes("full") && n.includes("result") && !n.includes("half")) ||
-    n === "match result"
-  ) {
-    return true;
-  }
-
-  return /^1x2$/i.test(trimmed);
-}
-
-function isLiveDoubleChanceMarket(nameRaw) {
-  if (isLiveOddsWindowOrIntervalMarket(nameRaw)) return false;
-  return String(nameRaw || "")
-    .toLowerCase()
-    .includes("double chance");
-}
-
-function isLiveMainMarketCategory(nameRaw) {
-  return (
-    isLiveThreeWayResultMarket(nameRaw) || isLiveDoubleChanceMarket(nameRaw)
-  );
-}
-
-/** Higher = better source for the compact 1 / X / 2 row. */
-function liveThreeWayMarketPriority(nameRaw) {
-  if (!isLiveThreeWayResultMarket(nameRaw)) return -1;
-  const n = String(nameRaw || "")
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-  if (n.includes("match winner")) return 100;
-  if (n.includes("full time result") || n.includes("fulltime result"))
-    return 90;
-  if (n === "match result") return 80;
-  if (/^1x2$/i.test(String(nameRaw || "").trim())) return 75;
-  if (n.includes("full") && n.includes("result")) return 70;
-  return 50;
+  if (period === "1H" || statusLabel === "1H") return "1H";
+  if (period === "2H" || statusLabel === "2H") return "2H";
+  return "Live";
 }
 
 function splitMatchTeams(matchName) {
@@ -240,8 +186,7 @@ function LiveExpansion({ match, onClose, onOddsClick, selectedOdds }) {
       <div className="border-b border-white/8 bg-[#000000]/90 px-3 py-3">
         <div className="mb-1 flex items-center justify-center gap-1 text-[11px] font-semibold text-[#ef4444]">
           <LiveIndicator />
-          {match.elapsedSeconds ||
-            (match.elapsed != null ? `${match.elapsed}'` : "Live")}
+          {liveClockLabel(match)}
         </div>
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <div className="flex flex-col items-center gap-1 text-center">
@@ -335,14 +280,19 @@ function LiveExpansion({ match, onClose, onOddsClick, selectedOdds }) {
   );
 }
 
-function LiveOddButton({ label, value, selected, onClick }) {
+function LiveOddButton({ label, value, selected, suspended, onClick }) {
+  const locked = !value || suspended;
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={!value}
-      className={`flex h-full min-h-[46px] w-full cursor-pointer flex-col items-center justify-center gap-1 border-l border-(--sb-border) bg-transparent px-1 py-1.5 disabled:cursor-default ${
-        selected ? "bg-(--sb-accent-surface)" : "hover:bg-(--sb-bg-card-elevated)"
+      disabled={locked}
+      className={`flex h-full min-h-[46px] w-full flex-col items-center justify-center gap-1 border-l border-(--sb-border) bg-transparent px-1 py-1.5 disabled:cursor-default ${
+        locked
+          ? "cursor-default opacity-45"
+          : selected
+            ? "cursor-pointer bg-(--sb-accent-surface)"
+            : "cursor-pointer hover:bg-(--sb-bg-card-elevated)"
       }`.trim()}
     >
       {label ? (
@@ -352,7 +302,11 @@ function LiveOddButton({ label, value, selected, onClick }) {
       ) : null}
       <span
         className={`text-[12px] font-bold ${
-          selected ? "text-white" : "text-(--sb-odds)"
+          locked
+            ? "text-(--sb-text-muted)"
+            : selected
+              ? "text-white"
+              : "text-(--sb-odds)"
         }`}
       >
         {value ?? "-"}
@@ -366,7 +320,10 @@ function LiveRow({ match, isExpanded, onToggle, onOddsClick, selectedOdds }) {
   const summaryMap = useMemo(
     () =>
       (match.markets || []).reduce((acc, market) => {
-        acc[String(market.id || "").toLowerCase()] = market.value;
+        acc[String(market.id || "").toLowerCase()] = {
+          value: market.value,
+          suspended: market.suspended === true,
+        };
         return acc;
       }, {}),
     [match.markets],
@@ -376,35 +333,18 @@ function LiveRow({ match, isExpanded, onToggle, onOddsClick, selectedOdds }) {
     match.liveStatus || match.status || "LIVE",
   ).toUpperCase();
 
-  let statusText = "Live";
-  if (
-    statusLabel === "HT" ||
-    statusLabel.includes("HALF TIME") ||
-    statusLabel.includes("HALFTIME")
-  ) {
-    statusText = "HT";
-  } else if (statusLabel === "PEN" || statusLabel.includes("PENALT")) {
+  let statusText = liveClockLabel(match);
+  if (statusLabel === "PEN" || statusLabel.includes("PENALT")) {
     statusText = "PEN";
   } else if (statusLabel.includes("EXTRA TIME") || statusLabel.includes("ET")) {
     statusText =
       match.elapsedSeconds ||
       (match.elapsed != null ? `ET ${match.elapsed}'` : "ET");
-  } else if (
-    statusLabel.includes("FIRST HALF") ||
-    statusLabel.includes("SECOND HALF")
-  ) {
-    statusText =
-      match.elapsedSeconds ||
-      (match.elapsed != null ? `${match.elapsed}'` : "Live");
-  } else if (match.elapsedSeconds) {
-    statusText = match.elapsedSeconds;
-  } else if (match.elapsed != null) {
-    statusText = `${match.elapsed}'`;
   }
 
   const oddsLabels = { 1: home, x: "X", 2: away };
   const selections = LIVE_MARKETS.filter(
-    (id) => id !== "x" || summaryMap.x != null,
+    (id) => id !== "x" || summaryMap.x?.value != null,
   );
 
   return (
@@ -471,17 +411,20 @@ function LiveRow({ match, isExpanded, onToggle, onOddsClick, selectedOdds }) {
         </div>
 
         {selections.map((marketId) => {
-          const value = summaryMap[marketId];
+          const cell = summaryMap[marketId];
+          const value = cell?.value;
+          const suspended = cell?.suspended === true;
           const selectionId = `${match.match}-${marketId.toUpperCase()}`;
           return (
             <LiveOddButton
               key={marketId}
               label={oddsLabels[marketId]}
               value={value}
+              suspended={suspended}
               selected={selectedOdds?.has(selectionId)}
               onClick={(e) => {
                 e.stopPropagation();
-                if (!value) return;
+                if (!value || suspended) return;
                 onOddsClick?.({
                   id: selectionId,
                   apiFixtureId: match.apiFixtureId,
@@ -640,9 +583,13 @@ function Live() {
           );
           return {
             ...fx,
-            _liveElapsed: liveOdds?.elapsed ?? null,
+            _liveElapsed: liveOdds?.elapsed ?? fx.elapsed ?? null,
             _liveElapsedSeconds: liveOdds?.elapsed_seconds ?? null,
-            _liveStatus: liveOdds?.status ?? null,
+            _liveStatus:
+              liveOdds?.status ??
+              (fx.live_period === "HT" || fx.status === "HT" ? "HT" : fx.status) ??
+              null,
+            _livePeriod: liveOdds?.period ?? fx.live_period ?? null,
             _liveMarkets: liveOdds?.markets ?? null,
             home_score: liveOdds?.home_score ?? fx.home_score ?? null,
             away_score: liveOdds?.away_score ?? fx.away_score ?? null,
@@ -680,6 +627,7 @@ function Live() {
           elapsed: fx._liveElapsed ?? base.elapsed ?? null,
           elapsedSeconds: fx._liveElapsedSeconds ?? null,
           liveStatus: fx._liveStatus ?? base.status ?? null,
+          livePeriod: fx._livePeriod ?? null,
           homeScore: fx.home_score ?? base.homeScore ?? null,
           awayScore: fx.away_score ?? base.awayScore ?? null,
         };
@@ -691,6 +639,7 @@ function Live() {
               odds: m.odd_lines.map((ol) => ({
                 id: ol.value,
                 value: ol.odd,
+                suspended: isLiveLineSuspended(ol),
               })),
             }))
             .filter((c) => c.odds.length > 0);
@@ -709,24 +658,20 @@ function Live() {
           );
 
           const summaryMarkets = [];
-          let bestThreeWay = null;
-          let bestThreeWayPri = -1;
-          for (const m of fx._liveMarkets) {
-            const p = liveThreeWayMarketPriority(m.name);
-            if (p > bestThreeWayPri) {
-              bestThreeWayPri = p;
-              bestThreeWay = m;
-            }
-          }
+          const bestThreeWay = pickBestLiveThreeWayMarket(fx._liveMarkets);
           if (bestThreeWay) {
             for (const ol of bestThreeWay.odd_lines || []) {
               const v = String(ol.value || "").toLowerCase();
+              const row = {
+                value: ol.odd,
+                suspended: isLiveLineSuspended(ol),
+              };
               if (v === "home" || v === "1")
-                summaryMarkets.push({ id: "1", value: ol.odd });
+                summaryMarkets.push({ id: "1", ...row });
               if (v === "draw" || v === "x")
-                summaryMarkets.push({ id: "x", value: ol.odd });
+                summaryMarkets.push({ id: "x", ...row });
               if (v === "away" || v === "2")
-                summaryMarkets.push({ id: "2", value: ol.odd });
+                summaryMarkets.push({ id: "2", ...row });
             }
           }
           const dcMarket = fx._liveMarkets.find((m) =>
@@ -735,12 +680,16 @@ function Live() {
           if (dcMarket) {
             for (const ol of dcMarket.odd_lines || []) {
               const v = String(ol.value || "").toLowerCase();
+              const row = {
+                value: ol.odd,
+                suspended: isLiveLineSuspended(ol),
+              };
               if (v.includes("home") && v.includes("draw"))
-                summaryMarkets.push({ id: "1x", value: ol.odd });
+                summaryMarkets.push({ id: "1x", ...row });
               if (v.includes("home") && v.includes("away"))
-                summaryMarkets.push({ id: "12", value: ol.odd });
+                summaryMarkets.push({ id: "12", ...row });
               if (v.includes("away") && v.includes("draw"))
-                summaryMarkets.push({ id: "x2", value: ol.odd });
+                summaryMarkets.push({ id: "x2", ...row });
             }
           }
           if (summaryMarkets.length > 0) {

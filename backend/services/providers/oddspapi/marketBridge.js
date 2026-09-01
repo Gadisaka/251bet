@@ -655,7 +655,7 @@ export function legacyMarket(marketId, outcomeId, catalogue, line = null) {
 /**
  * Group flattened OddsPapi lines into the public `{ name, odd_lines }` shape.
  */
-export function legacyMarketsFromLines(lines, marketMap = {}) {
+export function legacyMarketsFromLines(lines, marketMap = {}, { bookSuspended = false } = {}) {
   const byName = new Map();
   for (const line of lines || []) {
     const mapped = publicMarket(
@@ -665,8 +665,15 @@ export function legacyMarketsFromLines(lines, marketMap = {}) {
       line,
     );
     if (!mapped?.name || !mapped?.value) continue;
+    const active = line.active !== false && !bookSuspended;
     if (!byName.has(mapped.name)) byName.set(mapped.name, []);
-    byName.get(mapped.name).push({ value: mapped.value, odd: line.price });
+    byName.get(mapped.name).push({
+      value: mapped.value,
+      odd: line.price,
+      active,
+      changed_at: line.changedAt || null,
+      suspended: !active,
+    });
   }
   return [...byName.entries()].map(([name, odd_lines]) => ({ name, odd_lines }));
 }

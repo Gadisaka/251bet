@@ -83,6 +83,7 @@ export function flattenOdds(raw, bookmakerSlug) {
     for (const [oid, outcome] of Object.entries(market.outcomes || {})) {
       for (const [pid, player] of Object.entries(outcome.players || {})) {
         if (player?.price == null) continue;
+        const changedAt = player.changedAt || player.bookmakerChangedAt || null;
         lines.push({
           marketId: Number(mid),
           outcomeId: Number(oid),
@@ -90,7 +91,11 @@ export function flattenOdds(raw, bookmakerSlug) {
           playerName: player.playerName ? String(player.playerName).trim() : null,
           price: Number(player.price),
           value: String(player.bookmakerOutcomeId || oid),
-          active: player.active !== false && market.marketActive !== false,
+          active:
+            player.active !== false &&
+            market.marketActive !== false &&
+            book.suspended !== true,
+          changedAt,
           mainLine: Boolean(player.mainLine),
           maxLimit: player.limit == null ? null : Number(player.limit),
         });
@@ -98,6 +103,24 @@ export function flattenOdds(raw, bookmakerSlug) {
     }
   }
   return { suspended: book.suspended === true, lines };
+}
+
+function extractPeriodsObject(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  if (raw.scores?.periods && typeof raw.scores.periods === "object") {
+    return raw.scores.periods;
+  }
+  if (raw.periods && typeof raw.periods === "object") return raw.periods;
+  if (raw.scores && typeof raw.scores === "object") return raw.scores;
+  return null;
+}
+
+function readScore(row) {
+  if (!row || typeof row !== "object") return null;
+  const home = Number(row.participant1Score ?? row.home);
+  const away = Number(row.participant2Score ?? row.away);
+  if (!Number.isInteger(home) || !Number.isInteger(away)) return null;
+  return { home, away };
 }
 
 /**
@@ -108,23 +131,68 @@ export function flattenOdds(raw, bookmakerSlug) {
  * `fulltime` is the 90' score our graders settle on; `result` includes
  * overtime and must not be substituted for it.
  *
- * @returns {{ fullTime: {home,away}|null, halfTime: {home,away}|null, result: {home,away}|null }}
+ * `fullTime` / `halfTime` / `result` stay `{home,away}|null` so settlement
+ * callers are unchanged. `periods` adds `startedAt` for the live clock.
+ *
+ * @returns {{
+ *   fullTime: {home,away}|null,
+ *   halfTime: {home,away}|null,
+ *   result: {home,away}|null,
+ *   periods: Record<string, {home: number|null, away: number|null, startedAt: string|null, updatedAt: string|null}>
+ * }}
  */
 export function normalizeScores(raw) {
-  const periods = raw?.scores?.periods || raw?.periods || raw?.scores || null;
-  const read = (key) => {
-    const row = periods?.[key];
-    if (!row) return null;
-    const home = Number(row.participant1Score);
-    const away = Number(row.participant2Score);
-    if (!Number.isInteger(home) || !Number.isInteger(away)) return null;
-    return { home, away };
-  };
+  const rawPeriods = extractPeriodsObject(raw);
+  const read = (key) => readScore(rawPeriods?.[key]);
+  const periods = {};
+  if (rawPeriods) {
+    for (const [key, row] of Object.entries(rawPeriods)) {
+      if (!row || typeof row !== "object") continue;
+      const score = readScore(row);
+      periods[key] = {
+        home: score?.home ?? null,
+        away: score?.away ?? null,
+        startedAt: row.startedAt || null,
+        updatedAt: row.updatedAt || null,
+      };
+    }
+  }
   return {
     fullTime: read("fulltime"),
     halfTime: read("p1"),
     result: read("result"),
+    periods,
   };
+}
+
+/**
+ * WebSocket score frames are deltas (often only `result`). Replacing the
+ * cached tree would drop a previously-seen `p1`/`p2` and break half detection.
+ * Keeps the provider's period-object shape (`participant1Score`, `startedAt`).
+ */
+export function mergeScorePeriods(prevScores, patchScores) {
+  const prev = extractPeriodsObject(prevScores) || {};
+  const patch = extractPeriodsObject(patchScores) || {};
+  const periods = { ...prev };
+  for (const [key, row] of Object.entries(patch)) {
+    if (!row || typeof row !== "object") continue;
+    periods[key] = { ...(periods[key] || {}), ...row };
+  }
+  return { periods };
+}
+
+/** Settlement columns: `fulltime` → home/away, `p1` → ht_*. Never uses `result`. */
+export function settlementScorePatch(scored) {
+  const patch = {};
+  if (scored?.fullTime) {
+    patch.home_score = scored.fullTime.home;
+    patch.away_score = scored.fullTime.away;
+  }
+  if (scored?.halfTime) {
+    patch.ht_home_score = scored.halfTime.home;
+    patch.ht_away_score = scored.halfTime.away;
+  }
+  return patch;
 }
 
 export function marketStorageName(marketId, catalogueName) {

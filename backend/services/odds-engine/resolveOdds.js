@@ -1,6 +1,21 @@
 import { resolveMarketState } from "./marketState.js";
 import { buildPrematchMarketVersion } from "./versioning.js";
 import { perfTimed } from "../../lib/perfTiming.js";
+import { isPriceStale } from "../providers/oddspapi/liveOddsView.js";
+
+const STALE_1X2_NAMES = new Set([
+  "match winner",
+  "full time result",
+  "fulltime result",
+  "1x2",
+  "match result",
+]);
+
+function isStaleLiveOneXTwo(oddLine, fixture) {
+  const name = String(oddLine?.market?.name || "").toLowerCase().trim();
+  if (!STALE_1X2_NAMES.has(name)) return false;
+  return isPriceStale(oddLine?.changed_at, fixture?.live_updated_at);
+}
 
 function kickoffInPast(startTime, now = new Date()) {
   if (!startTime) return false;
@@ -262,7 +277,9 @@ export function buildMarketNameCandidates({ marketLabel, marketCode }) {
 function pickOddLineForSelection(fixtureLines, { valuesIn, marketNames }) {
   if (!fixtureLines || fixtureLines.length === 0) return null;
   const valueSet = new Set(valuesIn);
-  const valueMatches = fixtureLines.filter((line) => valueSet.has(line.value));
+  const valueMatches = fixtureLines.filter(
+    (line) => valueSet.has(line.value) && line.active !== false,
+  );
   if (valueMatches.length === 0) return null;
 
   // Equivalent to Prisma `orderBy: { odd: "desc" }` + `findFirst`.
@@ -318,6 +335,8 @@ function groupSelectionMetaByFixture(selectionMeta, fixtureByApiId) {
 const oddLineSelect = {
   odd: true,
   value: true,
+  active: true,
+  changed_at: true,
   provider_market_id: true,
   provider_outcome_id: true,
   provider_player_id: true,
@@ -389,6 +408,7 @@ export async function resolvePrematchOdds({
         api_fixture_id: true,
         status: true,
         start_time: true,
+        live_updated_at: true,
       },
     }),
   );
@@ -436,10 +456,13 @@ export async function resolvePrematchOdds({
       });
       continue;
     }
-    const oddLine = pickOddLineForSelection(linesByFixtureId.get(fixture.id), {
+    let oddLine = pickOddLineForSelection(linesByFixtureId.get(fixture.id), {
       valuesIn: meta.valuesIn,
       marketNames: meta.marketNames,
     });
+    if (oddLine && isStaleLiveOneXTwo(oddLine, fixture)) {
+      oddLine = null;
+    }
     if (!oddLine && process.env.ODDS_ENGINE_DEBUG === "true") {
       console.warn("[oddsEngine] no odd line found", {
         fixtureId: fixture.id,

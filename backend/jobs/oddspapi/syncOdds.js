@@ -38,6 +38,12 @@ async function dropProviderShapedMarkets(fixtureId) {
   return staleIds.length;
 }
 
+function parseChangedAt(value) {
+  if (value == null || value === "") return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isFinite(d.getTime()) ? d : null;
+}
+
 async function persistLines(
   fixtureRow,
   lines,
@@ -82,6 +88,7 @@ async function persistLines(
           active: line.active,
           main_line: line.mainLine,
           max_limit: line.maxLimit,
+          changed_at: parseChangedAt(line.changedAt),
         },
         create: {
           market_id: market.id,
@@ -94,6 +101,7 @@ async function persistLines(
           active: line.active,
           main_line: line.mainLine,
           max_limit: line.maxLimit,
+          changed_at: parseChangedAt(line.changedAt),
         },
       });
     }

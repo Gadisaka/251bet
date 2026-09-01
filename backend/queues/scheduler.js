@@ -273,6 +273,17 @@ function buildRepeatables() {
           jobId: toJobId(REPEATABLE_JOB_NAMES.ODDSPAPI_SETTLEMENT_SHADOW),
         },
       },
+      {
+        queue: q,
+        name: REPEATABLE_JOB_NAMES.ODDSPAPI_REAP_STALE_LIVE,
+        data: {},
+        opts: {
+          repeat: {
+            every: envMinutes("ODDSPAPI_STALE_LIVE_MINUTES", 15 * MINUTES),
+          },
+          jobId: toJobId(REPEATABLE_JOB_NAMES.ODDSPAPI_REAP_STALE_LIVE),
+        },
+      },
     );
   }
 

@@ -27,7 +27,10 @@ import {
 import { recomputeExtraMarketsCountForFixture } from "../services/extraMarketsCount.js";
 import { isOddspapiRow, notOddspapiWhere, PROVIDER_ODDSPAPI } from "../services/providers/publicScope.js";
 import { isOddspapiPublic } from "../services/providers/activeProvider.js";
-import { buildOddspapiLiveOdds } from "../services/providers/oddspapi/liveOddsView.js";
+import {
+  buildOddspapiLiveOdds,
+  liveDisplayFields,
+} from "../services/providers/oddspapi/liveOddsView.js";
 import {
   attachLeagueRanksToList,
   bookmakerCacheSuffix,
@@ -545,7 +548,7 @@ const LIVE_FIXTURES_CACHE_TTL = Number(
 
 router.get("/fixtures/live", async (_req, res) => {
   try {
-    const liveCacheKey = `live:fixtures:current:v5:${isOddspapiPublic() ? "oddspapi" : "apifootball"}`;
+    const liveCacheKey = `live:fixtures:current:v6:${isOddspapiPublic() ? "oddspapi" : "apifootball"}`;
     const cached = await getCache(liveCacheKey);
     if (cached) {
       return res.json(cached);
@@ -566,7 +569,19 @@ router.get("/fixtures/live", async (_req, res) => {
         },
         orderBy: { start_time: "asc" },
       });
-      const payload = attachLeagueRanksToList(sortFixturesByLeagueRank(rows));
+      const payload = attachLeagueRanksToList(sortFixturesByLeagueRank(rows)).map(
+        (row) => {
+          const display = liveDisplayFields(row);
+          return {
+            ...row,
+            home_score: display.home_score,
+            away_score: display.away_score,
+            elapsed: display.elapsed,
+            live_period: display.period,
+            status: display.status,
+          };
+        },
+      );
       await setCache(liveCacheKey, payload, LIVE_FIXTURES_CACHE_TTL);
       return res.json(payload);
     }

@@ -1,16 +1,91 @@
 import { getCache } from "../../cacheService.js";
 import { getOddspapiConfig, oddspapiWsCacheKey } from "./config.js";
-import { flattenOdds } from "./normalize.js";
+import { flattenOdds, normalizeScores } from "./normalize.js";
+import {
+  deriveLiveClock,
+  deriveLiveClockFromFixture,
+} from "./liveClock.js";
 import { legacyMarketsFromLines } from "./marketBridge.js";
 import { loadMarketMap } from "../../../jobs/oddspapi/cache.js";
 
-function mongoMarkets(fx) {
+const FT_1X2_NAMES = new Set([
+  "match winner",
+  "full time result",
+  "fulltime result",
+  "1x2",
+  "match result",
+]);
+
+function isFullTimeOneXTwo(name) {
+  return FT_1X2_NAMES.has(String(name || "").toLowerCase().trim());
+}
+
+export function isPriceStale(changedAt, liveUpdatedAt) {
+  const changed = Date.parse(changedAt);
+  const scored = Date.parse(liveUpdatedAt);
+  if (!Number.isFinite(changed) || !Number.isFinite(scored)) return false;
+  return changed < scored;
+}
+
+function annotateLine(ol, { liveUpdatedAt = null, marketName = "" } = {}) {
+  const active = ol?.active !== false && ol?.suspended !== true;
+  const stale =
+    isFullTimeOneXTwo(marketName) &&
+    isPriceStale(ol?.changed_at ?? ol?.changedAt, liveUpdatedAt);
+  const suspended = !active || stale;
+  return {
+    value: ol.value,
+    odd: ol.odd,
+    active,
+    changed_at: ol.changed_at ?? ol.changedAt ?? null,
+    suspended,
+  };
+}
+
+function mongoMarkets(fx, liveUpdatedAt) {
   return (fx.markets || [])
     .filter((m) => Array.isArray(m.odd_lines) && m.odd_lines.length > 0)
     .map((m) => ({
       name: m.name,
-      odd_lines: m.odd_lines.map((ol) => ({ value: ol.value, odd: ol.odd })),
+      odd_lines: m.odd_lines.map((ol) =>
+        annotateLine(ol, { liveUpdatedAt, marketName: m.name }),
+      ),
     }));
+}
+
+function hasPeriods(periods) {
+  return periods && typeof periods === "object" && Object.keys(periods).length > 0;
+}
+
+/**
+ * Live display fields for an in-play OddsPapi fixture.
+ * Prefers the merged WebSocket score tree, then persisted live_* columns,
+ * then settlement home/away as a last resort.
+ */
+export function liveDisplayFields(fx, ws = null) {
+  const scored = ws?.scores ? normalizeScores(ws) : null;
+  const clock = hasPeriods(scored?.periods)
+    ? deriveLiveClock(scored.periods)
+    : deriveLiveClockFromFixture(fx);
+  const liveHome =
+    scored?.result?.home ??
+    scored?.fullTime?.home ??
+    fx.live_home_score ??
+    fx.home_score ??
+    null;
+  const liveAway =
+    scored?.result?.away ??
+    scored?.fullTime?.away ??
+    fx.live_away_score ??
+    fx.away_score ??
+    null;
+  return {
+    home_score: liveHome,
+    away_score: liveAway,
+    elapsed: clock.elapsed,
+    period: clock.period,
+    status: clock.period === "HT" ? "HT" : fx.status,
+  };
 }
 
 /**
@@ -22,21 +97,34 @@ export async function buildOddspapiLiveOdds(fixtures, dropUnsupported) {
   const marketMap = await loadMarketMap();
   const out = [];
   for (const fx of fixtures) {
-    let markets = mongoMarkets(dropUnsupported ? dropUnsupported(fx) : fx);
+    const liveUpdatedAt = fx.live_updated_at || null;
+    let markets = mongoMarkets(
+      dropUnsupported ? dropUnsupported(fx) : fx,
+      liveUpdatedAt,
+    );
     const ws = fx.provider_fixture_id
       ? await getCache(oddspapiWsCacheKey(fx.provider_fixture_id))
       : null;
     if (ws?.bookmakerOdds) {
-      const { lines } = flattenOdds(ws, cfg.bookmaker);
-      const fromWs = legacyMarketsFromLines(lines, marketMap);
+      const { lines, suspended } = flattenOdds(ws, cfg.bookmaker);
+      const fromWs = legacyMarketsFromLines(lines, marketMap, {
+        bookSuspended: suspended,
+      }).map((m) => ({
+        name: m.name,
+        odd_lines: m.odd_lines.map((ol) =>
+          annotateLine(ol, { liveUpdatedAt, marketName: m.name }),
+        ),
+      }));
       if (fromWs.length) markets = fromWs;
     }
+    const display = liveDisplayFields(fx, ws);
     out.push({
       api_fixture_id: fx.api_fixture_id,
-      status: fx.status,
-      elapsed: null,
-      home_score: fx.home_score,
-      away_score: fx.away_score,
+      status: display.status,
+      elapsed: display.elapsed,
+      period: display.period,
+      home_score: display.home_score,
+      away_score: display.away_score,
       markets,
     });
   }

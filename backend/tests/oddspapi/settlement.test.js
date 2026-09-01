@@ -15,7 +15,10 @@ import {
   legacyMarket,
   LEGACY_MARKET_NAMES,
 } from "../../services/providers/oddspapi/marketBridge.js";
-import { normalizeScores } from "../../services/providers/oddspapi/normalize.js";
+import {
+  normalizeScores,
+  settlementScorePatch,
+} from "../../services/providers/oddspapi/normalize.js";
 import { evaluateSelection } from "../../services/marketEvaluatorV2.js";
 
 /** Trimmed from a real `/v4/settlements` response for a 0-0 fixture. */
@@ -395,6 +398,42 @@ test("normalizeScores reads NAMED periods, not positional ones", () => {
 test("normalizeScores returns nulls rather than guessing", () => {
   assert.deepEqual(normalizeScores(null).fullTime, null);
   assert.deepEqual(normalizeScores({ scores: { periods: {} } }).fullTime, null);
+});
+
+test("normalizeScores reads a live-only result period", () => {
+  const s = normalizeScores({
+    scores: {
+      periods: {
+        result: {
+          participant1Score: 2,
+          participant2Score: 0,
+          startedAt: "2026-09-01T14:00:05+00:00",
+        },
+      },
+    },
+  });
+  assert.deepEqual(s.fullTime, null);
+  assert.deepEqual(s.halfTime, null);
+  assert.deepEqual(s.result, { home: 2, away: 0 });
+  assert.equal(s.periods.result.startedAt, "2026-09-01T14:00:05+00:00");
+});
+
+test("settlementScorePatch uses fulltime, never result", () => {
+  const scored = normalizeScores({
+    scores: {
+      periods: {
+        result: { participant1Score: 3, participant2Score: 2 },
+        p1: { participant1Score: 1, participant2Score: 0 },
+        fulltime: { participant1Score: 2, participant2Score: 1 },
+      },
+    },
+  });
+  assert.deepEqual(settlementScorePatch(scored), {
+    home_score: 2,
+    away_score: 1,
+    ht_home_score: 1,
+    ht_away_score: 0,
+  });
 });
 
 test("provider verdicts agree with our grader on a real 0-0 fixture", () => {

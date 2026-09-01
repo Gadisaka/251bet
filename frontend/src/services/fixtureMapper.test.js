@@ -224,4 +224,19 @@ describe("mapFixtureToMatch summary strip", () => {
 
     expect(match.sideBets).toBe(142);
   });
+
+  it("prefers live_* scores on in-play fixtures", () => {
+    const match = mapFixtureToMatch({
+      ...baseFx(),
+      status: "LIVE",
+      home_score: 0,
+      away_score: 0,
+      live_home_score: 2,
+      live_away_score: 1,
+      elapsed: 67,
+    });
+    expect(match.homeScore).toBe(2);
+    expect(match.awayScore).toBe(1);
+    expect(match.elapsed).toBe(67);
+  });
 });

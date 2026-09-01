@@ -54,7 +54,7 @@ import { ticketWinningsTaxBreakdown } from "../lib/winningsTax.js";
 import { creditCashbackOnLostTicketInTx } from "../lib/bonusEngine.js";
 import { PROVIDER_ODDSPAPI } from "./providers/publicScope.js";
 import { getScores, getSettlements } from "./providers/oddspapi/endpoints.js";
-import { normalizeScores } from "./providers/oddspapi/normalize.js";
+import { normalizeScores, settlementScorePatch } from "./providers/oddspapi/normalize.js";
 import {
   lookupTicketResult,
   normalizeSettlements,
@@ -729,16 +729,7 @@ async function ensureOddspapiScores(fixture) {
     throw err;
   });
   if (!res) return fixture;
-  const { fullTime, halfTime } = normalizeScores(res.json);
-  const patch = {};
-  if (fullTime) {
-    patch.home_score = fullTime.home;
-    patch.away_score = fullTime.away;
-  }
-  if (halfTime) {
-    patch.ht_home_score = halfTime.home;
-    patch.ht_away_score = halfTime.away;
-  }
+  const patch = settlementScorePatch(normalizeScores(res.json));
   if (!Object.keys(patch).length) return fixture;
   await prisma.fixture.update({ where: { id: fixture.id }, data: patch });
   return { ...fixture, ...patch };

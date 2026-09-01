@@ -312,6 +312,13 @@ model Fixture {
   et_away_score  Int?
   pen_home_score Int?
   pen_away_score Int?
+  // In-play display only. `result` includes overtime, so these must stay
+  // off `home_score` / `away_score` which settlement grades from `fulltime`.
+  live_home_score        Int?
+  live_away_score        Int?
+  live_period            String?
+  live_period_started_at DateTime?
+  live_updated_at        DateTime?
   events_payload Json?
   stats_payload  Json?
   result_version Int       @default(0)
@@ -385,6 +392,7 @@ model FixtureOddLine {
   active              Boolean  @default(true)
   main_line           Boolean  @default(false)
   max_limit           Float?
+  changed_at          DateTime?
 
   market    FixtureMarket @relation(fields: [market_id], references: [id], onDelete: Cascade)
   bookmaker Bookmaker     @relation(fields: [bookmaker_id], references: [id], onDelete: Restrict)

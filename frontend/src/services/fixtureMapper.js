@@ -202,8 +202,15 @@ export function mapFixtureToMatch(fixture, oddsPayload = null) {
     sportId,
     sportName,
     status: fixture.status,
-    homeScore: fixture.home_score,
-    awayScore: fixture.away_score,
+    elapsed: fixture.elapsed ?? null,
+    homeScore:
+      ["LIVE", "HT", "1H", "2H"].includes(String(fixture.status || "").toUpperCase())
+        ? (fixture.live_home_score ?? fixture.home_score)
+        : fixture.home_score,
+    awayScore:
+      ["LIVE", "HT", "1H", "2H"].includes(String(fixture.status || "").toUpperCase())
+        ? (fixture.live_away_score ?? fixture.away_score)
+        : fixture.away_score,
     countryFlag,
     leagueLogo,
     homeTeamLogo,

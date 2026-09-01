@@ -8,7 +8,12 @@ import {
   parseProviderFixtureId,
 } from "../../services/providers/oddspapi/config.js";
 import { mergeBookmakerOdds } from "../../services/providers/oddspapi/mergeBookmakerOdds.js";
-import { normalizeScores } from "../../services/providers/oddspapi/normalize.js";
+import {
+  mergeScorePeriods,
+  normalizeScores,
+  settlementScorePatch,
+} from "../../services/providers/oddspapi/normalize.js";
+import { liveScorePatch } from "../../services/providers/oddspapi/liveClock.js";
 import prisma from "../../Config/db.js";
 import { persistOddspapiRawOdds } from "./syncOdds.js";
 
@@ -21,17 +26,13 @@ let reconnectTimer = null;
 let stats = { messages: 0, openedAt: null, lastMessageAt: null, reconnects: 0 };
 const lastPersistAt = new Map();
 
-function mergeScore(msg) {
-  const { fullTime, halfTime } = normalizeScores(msg);
-  const patch = {};
-  if (fullTime) {
-    patch.home_score = fullTime.home;
-    patch.away_score = fullTime.away;
-  }
-  if (halfTime) {
-    patch.ht_home_score = halfTime.home;
-    patch.ht_away_score = halfTime.away;
-  }
+/** Persist settlement scores from `fulltime`/`p1` and live display from `result`. */
+function mergeScore(cached) {
+  const scored = normalizeScores(cached);
+  const patch = {
+    ...settlementScorePatch(scored),
+    ...liveScorePatch(scored),
+  };
   return Object.keys(patch).length ? patch : null;
 }
 
@@ -58,7 +59,7 @@ async function applyMessage(msg) {
     updatedAt: msg.updatedAt || new Date().toISOString(),
   };
   if (msg.statusId != null) next.statusId = msg.statusId;
-  if (msg.scores) next.scores = msg.scores;
+  if (msg.scores) next.scores = mergeScorePeriods(prev.scores, msg.scores);
   if (msg.bookmakerOdds) {
     next.bookmakerOdds = mergeBookmakerOdds(prev.bookmakerOdds, msg.bookmakerOdds);
   }
@@ -67,8 +68,10 @@ async function applyMessage(msg) {
   if (apiId == null) return;
   const patch = {};
   if (msg.statusId != null) patch.status = mapStatusId(msg.statusId);
-  const score = mergeScore(msg);
-  if (score) Object.assign(patch, score);
+  if (msg.scores) {
+    const score = mergeScore(next);
+    if (score) Object.assign(patch, score);
+  }
 
   const existing = await prisma.fixture.findUnique({
     where: { api_fixture_id: apiId },
