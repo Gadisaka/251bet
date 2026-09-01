@@ -543,7 +543,7 @@ const LIVE_FIXTURES_CACHE_TTL = Number(
 
 router.get("/fixtures/live", async (_req, res) => {
   try {
-    const liveCacheKey = `live:fixtures:current:v3:${isOddspapiPublic() ? "oddspapi" : "apifootball"}`;
+    const liveCacheKey = `live:fixtures:current:v4:${isOddspapiPublic() ? "oddspapi" : "apifootball"}`;
     const cached = await getCache(liveCacheKey);
     if (cached) {
       return res.json(cached);
@@ -554,6 +554,7 @@ router.get("/fixtures/live", async (_req, res) => {
         where: {
           status: { in: ["LIVE", "HT"] },
           ...notOddspapiWhere(),
+          markets: { some: { odd_lines: { some: {} } } },
         },
         take: LIVE_FIXTURES_LIMIT,
         include: {
@@ -622,11 +623,12 @@ router.get("/fixtures/live", async (_req, res) => {
  */
 router.get("/odds/live", async (_req, res) => {
   try {
-    if (isOddspapiPublic()) {
+        if (isOddspapiPublic()) {
       const rows = await prisma.fixture.findMany({
         where: {
           status: { in: ["LIVE", "HT"] },
           ...notOddspapiWhere(),
+          markets: { some: { odd_lines: { some: {} } } },
         },
         take: LIVE_FIXTURES_LIMIT,
         include: {
