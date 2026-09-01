@@ -15,6 +15,7 @@ import {
   restoreWallet,
   walletSnapshot,
 } from "./walletBalance.js";
+import { cashbackLegOdds, isFullLoss, selectionResultFactor } from "./selectionPayout.js";
 
 /** @param {string} userId */
 export function welcomeBonusRef(userId) {
@@ -211,7 +212,7 @@ export function sumLostOdds(selections) {
   if (!Array.isArray(selections)) return { count, sumOdds };
   for (const sel of selections) {
     if (!sel) continue;
-    if (String(sel.result ?? "").toUpperCase() !== "LOST") continue;
+    if (!isFullLoss(sel)) continue;
     const o = Number(sel.odds);
     if (!Number.isFinite(o) || o <= 0) continue;
     count += 1;
@@ -306,9 +307,11 @@ export function cashbackTotalOddsFromSelections(selections) {
   if (!Array.isArray(selections) || selections.length === 0) return null;
   let product = 1;
   for (const sel of selections) {
-    if (String(sel?.result ?? "").toUpperCase() === "VOID") continue;
-    const o = Number(sel?.odds);
-    if (!Number.isFinite(o) || o <= 0) return null;
+    const result = String(sel?.result ?? "").toUpperCase();
+    if (result === "VOID") continue;
+    if (result === "LOST" && selectionResultFactor(sel) < 1) continue;
+    const o = cashbackLegOdds(sel);
+    if (o == null) return null;
     product *= o;
   }
   return product;
@@ -419,7 +422,7 @@ export function evaluateCashback({
   let largestLostOdds = 0;
   for (const sel of selections) {
     if (!sel) continue;
-    if (String(sel.result ?? "").toUpperCase() !== "LOST") continue;
+    if (!isFullLoss(sel)) continue;
     const o = Number(sel.odds);
     if (Number.isFinite(o) && o > largestLostOdds) largestLostOdds = o;
   }

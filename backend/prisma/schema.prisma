@@ -503,6 +503,10 @@ model TicketSelection {
   market_state      String?
   live_at_placement Boolean         @default(false)
   result        SelectionResult @default(PENDING)
+  // Fraction of stake that participates in the result. 1 = full
+  // win/loss, 0.5 = HALFWIN/HALFLOSS, 0 = void-equivalent. Null on
+  // legacy rows is treated as 1 (or 0 when result is VOID).
+  result_factor Float?
   // V2 audit trail: reason/engineVersion/marketVersion from the last
   // grading run. Persisted so manual re-grades and shadow-mode diffs
   // can be reconstructed offline.
@@ -511,6 +515,7 @@ model TicketSelection {
   server_market_version Int?
   provider_market_id    Int?
   provider_outcome_id   Int?
+  provider_player_id    Int      @default(0)
 
   ticket  Ticket   @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
   match   Match?   @relation(fields: [match_id], references: [id], onDelete: Restrict)

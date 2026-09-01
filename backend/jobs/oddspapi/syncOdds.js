@@ -4,7 +4,7 @@ import { getOddspapiConfig, PROVIDER } from "../../services/providers/oddspapi/c
 import { getOddsByTournaments } from "../../services/providers/oddspapi/endpoints.js";
 import { flattenOdds, normalizeFixture } from "../../services/providers/oddspapi/normalize.js";
 import { quotaSnapshot, allowOddsTier } from "../../services/providers/oddspapi/quota.js";
-import { legacyMarket } from "../../services/providers/oddspapi/marketBridge.js";
+import { publicMarket } from "../../services/providers/oddspapi/marketBridge.js";
 import { recomputeExtraMarketsCountForFixture } from "../../services/extraMarketsCount.js";
 import { ingestFixtureList } from "./syncFixtures.js";
 import { chunkIds, loadMarketMap, shadowStatsIncr } from "./cache.js";
@@ -50,10 +50,10 @@ async function persistLines(
   const byName = new Map();
   for (const line of lines) {
     const cat = marketMap[String(line.marketId)];
-    const legacy = legacyMarket(line.marketId, line.outcomeId, cat);
-    if (!legacy) continue;
-    if (!byName.has(legacy.name)) byName.set(legacy.name, []);
-    byName.get(legacy.name).push({ line, legacy });
+    const mapped = publicMarket(line.marketId, line.outcomeId, cat, line);
+    if (!mapped?.name || !mapped?.value) continue;
+    if (!byName.has(mapped.name)) byName.set(mapped.name, []);
+    byName.get(mapped.name).push({ line, mapped });
   }
 
   for (const [name, group] of byName) {
@@ -65,13 +65,13 @@ async function persistLines(
         name,
       },
     });
-    for (const { line, legacy } of group) {
+    for (const { line, mapped } of group) {
       await upsertNoTx(prisma.fixtureOddLine, {
         where: {
           market_id_bookmaker_id_value: {
             market_id: market.id,
             bookmaker_id: bookmaker.id,
-            value: legacy.value,
+            value: mapped.value,
           },
         },
         update: {
@@ -86,7 +86,7 @@ async function persistLines(
         create: {
           market_id: market.id,
           bookmaker_id: bookmaker.id,
-          value: legacy.value,
+          value: mapped.value,
           odd: line.price,
           provider_market_id: line.marketId,
           provider_outcome_id: line.outcomeId,
@@ -98,7 +98,7 @@ async function persistLines(
       });
     }
     if (pruneMissing) {
-      const values = [...new Set(group.map(({ legacy }) => legacy.value))];
+      const values = [...new Set(group.map(({ mapped }) => mapped.value))];
       await prisma.fixtureOddLine.deleteMany({
         where: {
           market_id: market.id,

@@ -79,6 +79,7 @@ const MAIN_MARKET = [
   "First Half Winner",
   "Second Half Winner",
   "Exact Score",
+  "Correct Score",
   "Correct Score - First Half",
   "Correct Score - Second Half",
   "Winning Margin",
@@ -224,6 +225,7 @@ const CORNERS = [
 const CARDS = [
   "Cards European Handicap",
   "Cards Over/Under",
+  "Cards 1x2",
   "Cards Asian Handicap",
   "Home Team Total Cards",
   "Away Team Total Cards",
@@ -369,6 +371,7 @@ export const LABEL_ALIASES = {
   "full time result": "match winner",
   "1x2": "match winner",
   "match result": "match winner",
+  "correct score": "exact score",
   "home win to nill (1st half)": "home win to nil (1st half)",
   "home win to nill (2nd half)": "home win to nil (2nd half)",
   "away win to nill (1st half)": "away win to nil (1st half)",

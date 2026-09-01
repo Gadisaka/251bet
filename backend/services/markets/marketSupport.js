@@ -233,6 +233,56 @@ export function isProviderMarketNameAllowed(name) {
   return isCodeAllowed(code);
 }
 
+/** OddsPapi market/outcome ids are positive integers. Null/0 are unset. */
+export function asProviderId(value) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n === 0) return null;
+  return n;
+}
+
+export function asProviderPlayerId(value) {
+  if (value == null || value === "") return 0;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export function hasProviderOutcomeIds(row = {}) {
+  return (
+    asProviderId(row.providerMarketId ?? row.provider_market_id) != null &&
+    asProviderId(row.providerOutcomeId ?? row.provider_outcome_id) != null
+  );
+}
+
+/** OddsPapi public book: any priced line with provider ids is offerable. */
+export function isOddspapiMarketOfferable(market) {
+  const lines = market?.odd_lines;
+  if (!Array.isArray(lines) || lines.length === 0) return false;
+  return lines.some((line) => {
+    const odd = Number(line?.odd);
+    return Number.isFinite(odd) && odd > 0 && hasProviderOutcomeIds(line);
+  });
+}
+
+/**
+ * Fixture-flow placement: provider ids settle via /v4/settlements, so they
+ * bypass the name allowlist. Legs without ids still need a strict grader.
+ */
+export function isFixtureLegPlaceable({
+  support = null,
+  providerMarketId,
+  providerOutcomeId,
+} = {}) {
+  if (hasProviderOutcomeIds({ providerMarketId, providerOutcomeId })) {
+    return { ok: true, reason: null };
+  }
+  if (support?.ok) return { ok: true, reason: null };
+  return {
+    ok: false,
+    reason: support?.reason || "missing_provider_ids",
+  };
+}
+
 function hasStatQualifier(name) {
   return /yellow|card|corner|offside|foul|save|shot|book|tackle|passes|penalt|\bred\b/i.test(name);
 }
@@ -295,8 +345,10 @@ export function hasRealGrader(code) {
  *
  * @param {{ marketCode?, marketLabel?, selection?, label?, marketParams? }} input
  * @param {{ mode?: "strict"|"lenient" }} [opts]
- *   strict  = public/prebook: all four checks incl. allowlist.
- *   lenient = cashier admin-Match: checks 1–3 only (no feed allowlist).
+ *   strict  = feed allowlist (admin leftover API-Football path; fixture
+ *             legs without provider ids).
+ *   lenient = skip allowlist (admin Match cashier; prebook attaches a
+ *             code when known but does not reject unknown OddsPapi names).
  * @returns {{ ok: boolean, code: string|null, params: object|null, reason: string|null }}
  */
 export function classifySelectionSupport(input = {}, opts = {}) {

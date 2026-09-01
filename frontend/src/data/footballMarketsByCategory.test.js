@@ -37,6 +37,11 @@ describe("getTabsForMarketName", () => {
     expect(tabs.has("handicaps")).toBe(true);
   });
 
+  it("maps Correct Score and Cards 1x2 onto existing tabs", () => {
+    expect(getTabsForMarketName("Correct Score").has("main-market")).toBe(true);
+    expect(getTabsForMarketName("Cards 1x2").has("cards")).toBe(true);
+  });
+
   it("returns empty set for unknown labels", () => {
     expect(getTabsForMarketName("Completely Unknown Market XYZ").size).toBe(0);
   });

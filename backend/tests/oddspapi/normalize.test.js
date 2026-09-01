@@ -72,7 +72,7 @@ test("normalizeFixture maps OddsPapi payload", () => {
   assert.equal(fx.home_api_team_id, TEAM_ID_BASE + 35);
 });
 
-test("flattenOdds drops player props and keeps 1xbet prices", () => {
+test("flattenOdds keeps player props and 1xbet prices", () => {
   const { lines, suspended } = flattenOdds(
     {
       bookmakerOdds: {
@@ -110,9 +110,12 @@ test("flattenOdds drops player props and keeps 1xbet prices", () => {
     "1xbet",
   );
   assert.equal(suspended, false);
-  assert.equal(lines.length, 2);
+  assert.equal(lines.length, 3);
   assert.equal(lines[0].value, "home");
   assert.equal(lines[0].marketId, 101);
+  const prop = lines.find((l) => l.playerId === 42);
+  assert.equal(prop.playerName, "Salah");
+  assert.equal(prop.price, 1.5);
 });
 
 test("marketStorageName keeps marketId unique per fixture", () => {

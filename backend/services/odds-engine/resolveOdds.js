@@ -320,6 +320,7 @@ const oddLineSelect = {
   value: true,
   provider_market_id: true,
   provider_outcome_id: true,
+  provider_player_id: true,
   market: { select: { name: true, fixture_id: true } },
   bookmaker: { select: { api_bookmaker_id: true } },
 };
@@ -477,6 +478,7 @@ export async function resolvePrematchOdds({
       serverUpdatedAt: fixture.start_time,
       providerMarketId: oddLine?.provider_market_id ?? null,
       providerOutcomeId: oddLine?.provider_outcome_id ?? null,
+      providerPlayerId: oddLine?.provider_player_id ?? 0,
     });
   }
   return resolved;

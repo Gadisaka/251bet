@@ -11,6 +11,7 @@ import {
   bridgeSelection,
   familyKey,
   isBridgeable,
+  publicMarket,
   legacyMarket,
   LEGACY_MARKET_NAMES,
 } from "../../services/providers/oddspapi/marketBridge.js";
@@ -157,12 +158,17 @@ test("isFullyUndecided detects an ungraded fixture", () => {
   assert.equal(isFullyUndecided({}), true);
 });
 
-test("lookupTicketResult maps a settled outcome and refuses half-stake", () => {
+test("lookupTicketResult maps a settled outcome including half-stake", () => {
   const { byKey } = normalizeSettlements(SETTLEMENTS);
   assert.equal(lookupTicketResult(byKey, 101, 102).result, "WON");
   assert.equal(lookupTicketResult(byKey, 101, 101).result, "LOST");
-  assert.equal(lookupTicketResult(byKey, 1070, 1070).result, "PENDING");
-  assert.equal(lookupTicketResult(byKey, 1070, 1070).reason, "half_stake_unsupported");
+  const halfWin = lookupTicketResult(byKey, 1070, 1070);
+  assert.equal(halfWin.result, "WON");
+  assert.equal(halfWin.factor, 0.5);
+  assert.equal(halfWin.reason, "oddspapi:HALFWIN");
+  const halfLoss = lookupTicketResult(byKey, 1070, 1071);
+  assert.equal(halfLoss.result, "LOST");
+  assert.equal(halfLoss.factor, 0.5);
   assert.equal(lookupTicketResult(byKey, 999, 999).result, "PENDING");
   assert.equal(lookupTicketResult(byKey, null, 101).reason, "missing_provider_ids");
 });
@@ -195,12 +201,13 @@ test("bridge maps the core score-derived markets", () => {
   });
 });
 
-test("bridge refuses markets we cannot grade or pay correctly", () => {
-  // Asian handicaps settle HALFWIN/HALFLOSS, which our result enum cannot
-  // express until `result_factor` ships.
-  assert.equal(bridgeSelection(1070, 1070, CATALOGUE[1070]), null);
-  assert.equal(isBridgeable(1070, CATALOGUE[1070]), false);
-  // Player props were removed from the plan entirely.
+test("bridge maps asian handicap and still skips player props", () => {
+  assert.deepEqual(bridgeSelection(1070, 1070, CATALOGUE[1070]), {
+    market_code: "HANDICAP_ASIAN",
+    selection: "1",
+    params: { side: "HOME", handicap: -0.25 },
+  });
+  assert.equal(isBridgeable(1070, CATALOGUE[1070]), true);
   assert.equal(bridgeSelection(10730, 10730, CATALOGUE[10730]), null);
   assert.equal(isBridgeable(10730, CATALOGUE[10730]), false);
 });
@@ -294,12 +301,78 @@ test("legacyMarket names match the public list allowlist byte-for-byte", () => {
   }
 });
 
-test("legacyMarket refuses quarter-line totals that settle half-stake", () => {
+test("publicMarket persists quarter-line totals and asian handicap", () => {
   const cat = {
     ...CATALOGUE[106],
     handicap: 0.75,
   };
-  assert.equal(legacyMarket(106, 106, cat), null);
+  const ou = publicMarket(106, 106, cat);
+  assert.equal(ou.name, "Goals Over/Under");
+  assert.equal(ou.value, "Over 0.75");
+  const ah = publicMarket(1070, 1070, CATALOGUE[1070]);
+  assert.equal(ah.name, "Asian Handicap");
+  assert.equal(ah.value, "Home -0.25");
+  const ahAway = publicMarket(1070, 1071, CATALOGUE[1070]);
+  assert.equal(ahAway.value, "Away +0.25");
+});
+
+test("publicMarket maps HT 1x2 and falls back to catalogue names", () => {
+  const ht = publicMarket(201, 201, {
+    marketName: "First Half Result",
+    marketType: "1x2",
+    period: "p1",
+    handicap: 0,
+    playerProp: false,
+    outcomes: { 201: "1", 202: "X", 203: "2" },
+  });
+  assert.equal(ht.name, "First Half Winner");
+  assert.equal(ht.value, "Home");
+  const unknown = publicMarket(888, 1, {
+    marketName: "Method of Victory",
+    marketType: "method",
+    period: "fulltime",
+    handicap: 0,
+    playerProp: false,
+    outcomes: { 1: "Regular Time" },
+  });
+  assert.equal(unknown.name, "Method of Victory");
+  assert.equal(unknown.value, "Regular Time");
+  assert.equal(unknown.market_code, null);
+});
+
+test("publicMarket encodes player props in the line value", () => {
+  const mapped = publicMarket(
+    10730,
+    10730,
+    CATALOGUE[10730],
+    { playerId: 42, playerName: "Haaland" },
+  );
+  assert.equal(mapped.name, "Anytime Goal Scorer");
+  assert.equal(mapped.value, "Haaland - Yes");
+});
+
+test("publicMarket keeps team totals off the match OU name", () => {
+  const home = publicMarket(2001, 1, {
+    marketName: "Home Team Total",
+    marketType: "totals",
+    period: "fulltime",
+    handicap: 1.5,
+    playerProp: false,
+    outcomes: { 1: "Over", 2: "Under" },
+  });
+  assert.equal(home.name, "Total - Home");
+  assert.equal(home.value, "Over 1.5");
+  assert.equal(home.market_code, "TEAM_TOTAL_HOME");
+  const ht = publicMarket(2002, 1, {
+    marketName: "Home Team Total First Half",
+    marketType: "totals",
+    period: "p1",
+    handicap: 0.5,
+    playerProp: false,
+    outcomes: { 1: "Over", 2: "Under" },
+  });
+  assert.equal(ht.name, "Home Team Total Goals(1st Half)");
+  assert.equal(ht.value, "Over 0.5");
 });
 
 test("normalizeScores reads NAMED periods, not positional ones", () => {
@@ -334,6 +407,7 @@ test("provider verdicts agree with our grader on a real 0-0 fixture", () => {
 
   let compared = 0;
   for (const entry of byKey.values()) {
+    if (entry.factor === 0.5) continue;
     const bridged = bridgeSelection(entry.marketId, entry.outcomeId, CATALOGUE[entry.marketId]);
     if (!bridged) continue;
     const ours = evaluateSelection(

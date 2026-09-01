@@ -72,7 +72,8 @@ export function normalizeFixture(raw) {
 
 /**
  * Flatten 1xBet (or configured bookmaker) odds into persistable lines.
- * Player-prop rows (playerId !== 0) are dropped — the plan does not include them.
+ * Player-prop rows keep `playerId` / `playerName` so unique line values
+ * can include the player (`Haaland - Yes`).
  */
 export function flattenOdds(raw, bookmakerSlug) {
   const book = raw?.bookmakerOdds?.[bookmakerSlug];
@@ -81,12 +82,12 @@ export function flattenOdds(raw, bookmakerSlug) {
   for (const [mid, market] of Object.entries(book.markets)) {
     for (const [oid, outcome] of Object.entries(market.outcomes || {})) {
       for (const [pid, player] of Object.entries(outcome.players || {})) {
-        if (String(pid) !== "0") continue;
         if (player?.price == null) continue;
         lines.push({
           marketId: Number(mid),
           outcomeId: Number(oid),
-          playerId: 0,
+          playerId: Number(pid) || 0,
+          playerName: player.playerName ? String(player.playerName).trim() : null,
           price: Number(player.price),
           value: String(player.bookmakerOutcomeId || oid),
           active: player.active !== false && market.marketActive !== false,

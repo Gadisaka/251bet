@@ -1,15 +1,16 @@
 /**
  * Bridge OddsPapi `(marketId, outcomeId)` pairs onto the selection shape our
- * grading engine understands (`market_code` + `params`).
+ * grading engine understands (`market_code` + `params`), and onto the public
+ * `FixtureMarket.name` / `FixtureOddLine.value` strings the frontend already
+ * knows.
  *
- * Scope is deliberately narrow: only markets that `marketEvaluatorV2` can
- * settle from a fixture's score alone. Corners, bookings and player props need
- * API-Football statistics we never collect for OddsPapi rows, and Asian
- * handicaps need the fractional `result_factor` column that does not exist yet
- * (§6.2). Anything unmapped returns `null` and is counted, not guessed.
+ * Settlement for OddsPapi legs is `/v4/settlements` keyed by provider ids, so
+ * unknown families are still persisted with the catalogue display name rather
+ * than dropped. `bridgeSelection` returning null only means V2 cannot shadow
+ * that market.
  *
  * Keyed on the catalogue's `marketType`/`period` rather than raw market ids,
- * because a single family (e.g. `totals|fulltime`) spans 34 ids that differ
+ * because a single family (e.g. `totals|fulltime`) spans many ids that differ
  * only by `handicap`.
  */
 
@@ -19,7 +20,7 @@ function label(catalogue, outcomeId) {
 }
 
 function side1x2(raw) {
-  const key = raw.toUpperCase();
+  const key = String(raw || "").toUpperCase();
   if (key === "1") return "HOME";
   if (key === "X") return "DRAW";
   if (key === "2") return "AWAY";
@@ -27,28 +28,30 @@ function side1x2(raw) {
 }
 
 function overUnderSide(raw) {
-  const key = raw.toUpperCase();
+  const key = String(raw || "").toUpperCase();
   if (key === "OVER") return "OVER";
   if (key === "UNDER") return "UNDER";
   return null;
 }
 
 function yesNo(raw) {
-  const key = raw.toUpperCase();
+  const key = String(raw || "").toUpperCase();
   if (key === "YES") return "YES";
   if (key === "NO") return "NO";
   return null;
 }
 
 function oddEven(raw) {
-  const key = raw.toUpperCase();
+  const key = String(raw || "").toUpperCase();
   if (key === "ODD") return "ODD";
   if (key === "EVEN") return "EVEN";
   return null;
 }
 
 function doubleChance(raw) {
-  const key = raw.toUpperCase().replace(/\s+/g, "");
+  const key = String(raw || "")
+    .toUpperCase()
+    .replace(/\s+/g, "");
   if (key === "1X" || key === "X1") return "1X";
   if (key === "12" || key === "21") return "12";
   if (key === "X2" || key === "2X") return "X2";
@@ -60,10 +63,37 @@ function numericLine(catalogue) {
   return Number.isFinite(n) ? n : null;
 }
 
+function parseScore(raw) {
+  const m = /^\s*(\d{1,2})\s*[-:]\s*(\d{1,2})\s*$/.exec(String(raw || ""));
+  if (!m) return null;
+  return { home: Number(m[1]), away: Number(m[2]) };
+}
+
+function parseHtFt(raw) {
+  const parts = String(raw || "").split("/");
+  if (parts.length !== 2) return null;
+  const ht = side1x2(parts[0]) || doubleChance(parts[0]);
+  const ft = side1x2(parts[1]) || doubleChance(parts[1]);
+  if (!ht || !ft) return null;
+  if (!["HOME", "DRAW", "AWAY"].includes(ht)) return null;
+  if (!["HOME", "DRAW", "AWAY"].includes(ft)) return null;
+  return { ht, ft };
+}
+
+function formatHandicap(n) {
+  if (!Number.isFinite(n)) return "";
+  if (Object.is(n, -0) || n === 0) return "0";
+  return n > 0 ? `+${n}` : String(n);
+}
+
+function ouLabel(side, line) {
+  return `${side === "OVER" ? "Over" : "Under"} ${line}`;
+}
+
 /**
  * Each handler receives the outcome label and catalogue entry and returns
  * `{ market_code, selection, params }`, or `null` when the outcome is not one
- * we can grade.
+ * we can map onto a V2 code.
  */
 const FAMILIES = new Map([
   [
@@ -81,12 +111,45 @@ const FAMILIES = new Map([
     },
   ],
   [
+    "1x2|p2",
+    (name) => {
+      const side = side1x2(name);
+      return side && { market_code: "SECOND_HALF_RESULT", selection: name, params: { side } };
+    },
+  ],
+  [
     "doublechance|fulltime",
     (name) => {
       const combination = doubleChance(name);
       return (
         combination && {
           market_code: "DOUBLE_CHANCE",
+          selection: combination,
+          params: { combination },
+        }
+      );
+    },
+  ],
+  [
+    "doublechance|p1",
+    (name) => {
+      const combination = doubleChance(name);
+      return (
+        combination && {
+          market_code: "DOUBLE_CHANCE_HT",
+          selection: combination,
+          params: { combination },
+        }
+      );
+    },
+  ],
+  [
+    "doublechance|p2",
+    (name) => {
+      const combination = doubleChance(name);
+      return (
+        combination && {
+          market_code: "DOUBLE_CHANCE_SH",
           selection: combination,
           params: { combination },
         }
@@ -102,10 +165,40 @@ const FAMILIES = new Map([
     },
   ],
   [
+    "drawnobet|p1",
+    (name) => {
+      const side = side1x2(name);
+      if (!side || side === "DRAW") return null;
+      return { market_code: "DRAW_NO_BET_HT", selection: name, params: { side } };
+    },
+  ],
+  [
+    "drawnobet|p2",
+    (name) => {
+      const side = side1x2(name);
+      if (!side || side === "DRAW") return null;
+      return { market_code: "DRAW_NO_BET_SH", selection: name, params: { side } };
+    },
+  ],
+  [
     "bothteamsscore|fulltime",
     (name) => {
       const pick = yesNo(name);
       return pick && { market_code: "BTTS", selection: pick, params: { pick } };
+    },
+  ],
+  [
+    "bothteamsscore|p1",
+    (name) => {
+      const pick = yesNo(name);
+      return pick && { market_code: "BTTS_HT", selection: pick, params: { pick } };
+    },
+  ],
+  [
+    "bothteamsscore|p2",
+    (name) => {
+      const pick = yesNo(name);
+      return pick && { market_code: "BTTS_SH", selection: pick, params: { pick } };
     },
   ],
   [
@@ -116,7 +209,7 @@ const FAMILIES = new Map([
       if (!side || line === null) return null;
       return {
         market_code: "OVER_UNDER",
-        selection: `${side === "OVER" ? "Over" : "Under"} ${line}`,
+        selection: ouLabel(side, line),
         params: { side, line },
       };
     },
@@ -129,7 +222,20 @@ const FAMILIES = new Map([
       if (!side || line === null) return null;
       return {
         market_code: "HT_OVER_UNDER",
-        selection: `${side === "OVER" ? "Over" : "Under"} ${line}`,
+        selection: ouLabel(side, line),
+        params: { side, line },
+      };
+    },
+  ],
+  [
+    "totals|p2",
+    (name, catalogue) => {
+      const side = overUnderSide(name);
+      const line = numericLine(catalogue);
+      if (!side || line === null) return null;
+      return {
+        market_code: "SH_OVER_UNDER",
+        selection: ouLabel(side, line),
         params: { side, line },
       };
     },
@@ -139,6 +245,99 @@ const FAMILIES = new Map([
     (name) => {
       const pick = oddEven(name);
       return pick && { market_code: "ODD_EVEN", selection: pick, params: { pick } };
+    },
+  ],
+  [
+    "oddeven|p1",
+    (name) => {
+      const pick = oddEven(name);
+      return pick && { market_code: "ODD_EVEN_HT", selection: pick, params: { pick } };
+    },
+  ],
+  [
+    "oddeven|p2",
+    (name) => {
+      const pick = oddEven(name);
+      return pick && { market_code: "ODD_EVEN_SH", selection: pick, params: { pick } };
+    },
+  ],
+  [
+    "spreads|fulltime",
+    (name, catalogue) => {
+      const side = side1x2(name);
+      const handicap = numericLine(catalogue);
+      if (!side || side === "DRAW" || handicap === null) return null;
+      return {
+        market_code: "HANDICAP_ASIAN",
+        selection: name,
+        params: { side, handicap },
+      };
+    },
+  ],
+  [
+    "spreads|p1",
+    (name, catalogue) => {
+      const side = side1x2(name);
+      const handicap = numericLine(catalogue);
+      if (!side || side === "DRAW" || handicap === null) return null;
+      return {
+        market_code: "HANDICAP_ASIAN_HT",
+        selection: name,
+        params: { side, handicap },
+      };
+    },
+  ],
+  [
+    "spreads|p2",
+    (name, catalogue) => {
+      const side = side1x2(name);
+      const handicap = numericLine(catalogue);
+      if (!side || side === "DRAW" || handicap === null) return null;
+      return {
+        market_code: "HANDICAP_ASIAN_SH",
+        selection: name,
+        params: { side, handicap },
+      };
+    },
+  ],
+  [
+    "correctscore|fulltime",
+    (name) => {
+      const score = parseScore(name);
+      return (
+        score && {
+          market_code: "CORRECT_SCORE",
+          selection: `${score.home}-${score.away}`,
+          params: score,
+        }
+      );
+    },
+  ],
+  [
+    "correctscore|p1",
+    (name) => {
+      const score = parseScore(name);
+      return (
+        score && {
+          market_code: "CORRECT_SCORE_HT",
+          selection: `${score.home}-${score.away}`,
+          params: score,
+        }
+      );
+    },
+  ],
+  [
+    "htft|fulltime",
+    (name) => {
+      const combo = parseHtFt(name);
+      return combo && { market_code: "HT_FT", selection: name, params: combo };
+    },
+  ],
+  [
+    "halftime/fulltime|fulltime",
+    (name) => {
+      const combo = parseHtFt(name);
+      return combo && { market_code: "HT_FT", selection: name, params: combo };
     },
   ],
 ]);
@@ -175,9 +374,8 @@ export function bridgedFamilies() {
 }
 
 /**
- * The four codes the `today` allowlist offers. Anything else the bridge can
- * grade (DNB, odd/even, HT) is kept off the public book until that phase
- * expands.
+ * The four codes the original cutover offered. Kept for tests / docs; ingest
+ * no longer filters on this set.
  */
 export const CUTOVER_CODES = Object.freeze([
   "MATCH_WINNER",
@@ -186,62 +384,272 @@ export const CUTOVER_CODES = Object.freeze([
   "OVER_UNDER",
 ]);
 
-const CUTOVER_CODE_SET = new Set(CUTOVER_CODES);
-
 /** Exact strings `fixturesListService` and `PROVIDER_NAME_TO_CODE` expect. */
 export const LEGACY_MARKET_NAMES = Object.freeze({
   MATCH_WINNER: "Match Winner",
   DOUBLE_CHANCE: "Double Chance",
   BTTS: "Both Teams Score",
   OVER_UNDER: "Goals Over/Under",
+  DRAW_NO_BET: "Draw No Bet",
+  ODD_EVEN: "Odd/Even",
+  HALF_TIME_RESULT: "First Half Winner",
+  SECOND_HALF_RESULT: "Second Half Winner",
+  HT_OVER_UNDER: "Goals Over/Under First Half",
+  SH_OVER_UNDER: "Goals Over/Under - Second Half",
+  HANDICAP_ASIAN: "Asian Handicap",
+  HANDICAP_ASIAN_HT: "Asian Handicap First Half",
+  HANDICAP_ASIAN_SH: "Asian Handicap (2nd Half)",
+  CORRECT_SCORE: "Correct Score",
+  CORRECT_SCORE_HT: "Correct Score - First Half",
+  HT_FT: "HT/FT Double",
+  DOUBLE_CHANCE_HT: "Double Chance - First Half",
+  DOUBLE_CHANCE_SH: "Double Chance - Second Half",
+  DRAW_NO_BET_HT: "Draw No Bet (1st Half)",
+  DRAW_NO_BET_SH: "Draw No Bet (2nd Half)",
+  BTTS_HT: "Both Teams Score - First Half",
+  BTTS_SH: "Both Teams To Score - Second Half",
+  ODD_EVEN_HT: "Odd/Even - First Half",
+  ODD_EVEN_SH: "Odd/Even - Second Half",
+  CORNERS_OVER_UNDER: "Corners Over Under",
+  CORNERS_1X2_FT: "Corners 1x2",
+  CORNERS_HANDICAP_ASIAN: "Corners Asian Handicap",
+  CARDS_OVER_UNDER: "Cards Over/Under",
+  CARDS_1X2_FT: "Cards 1x2",
+  TEAM_TOTAL_HOME: "Total - Home",
+  TEAM_TOTAL_AWAY: "Total - Away",
 });
 
-const LEGACY_VALUES = Object.freeze({
-  MATCH_WINNER: Object.freeze({ HOME: "Home", DRAW: "Draw", AWAY: "Away" }),
-  DOUBLE_CHANCE: Object.freeze({
-    "1X": "Home/Draw",
-    "12": "Home/Away",
-    X2: "Draw/Away",
-  }),
-  BTTS: Object.freeze({ YES: "Yes", NO: "No" }),
+const ONE_X_TWO_VALUES = Object.freeze({ HOME: "Home", DRAW: "Draw", AWAY: "Away" });
+const DC_VALUES = Object.freeze({
+  "1X": "Home/Draw",
+  "12": "Home/Away",
+  X2: "Draw/Away",
 });
+const YES_NO_VALUES = Object.freeze({ YES: "Yes", NO: "No" });
+const OE_VALUES = Object.freeze({ ODD: "Odd", EVEN: "Even" });
 
-function legacyValue(bridged) {
-  if (bridged.market_code === "OVER_UNDER") return bridged.selection;
-  const table = LEGACY_VALUES[bridged.market_code];
-  if (!table) return null;
-  if (bridged.market_code === "MATCH_WINNER") return table[bridged.params.side] || null;
-  if (bridged.market_code === "DOUBLE_CHANCE") {
-    return table[bridged.params.combination] || null;
-  }
-  if (bridged.market_code === "BTTS") return table[bridged.params.pick] || null;
+function statKind(marketName) {
+  const n = String(marketName || "").toLowerCase();
+  if (/corner/.test(n)) return "corners";
+  if (/yellow/.test(n)) return "yellow";
+  if (/card|booking|booked/.test(n)) return "cards";
+  if (/offside/.test(n)) return "offsides";
+  if (/foul/.test(n)) return "fouls";
+  if (/\bshots?\b/.test(n)) return "shots";
+  if (/save/.test(n)) return "saves";
+  return "goals";
+}
+
+function homeOrAwayOnly(marketName) {
+  const n = String(marketName || "").toLowerCase();
+  const hasHome = /\bhome\b/.test(n);
+  const hasAway = /\baway\b/.test(n);
+  if (hasHome && !hasAway) return "HOME";
+  if (hasAway && !hasHome) return "AWAY";
   return null;
 }
 
+function remapStatCode(bridged, kind) {
+  if (!bridged || kind === "goals") return bridged;
+  const code = bridged.market_code;
+  if (kind === "corners") {
+    if (code === "MATCH_WINNER") return { ...bridged, market_code: "CORNERS_1X2_FT" };
+    if (code === "OVER_UNDER") return { ...bridged, market_code: "CORNERS_OVER_UNDER" };
+    if (code === "HANDICAP_ASIAN") {
+      return { ...bridged, market_code: "CORNERS_HANDICAP_ASIAN" };
+    }
+  }
+  if (kind === "cards" || kind === "yellow") {
+    if (code === "MATCH_WINNER") return { ...bridged, market_code: "CARDS_1X2_FT" };
+    if (code === "OVER_UNDER") return { ...bridged, market_code: "CARDS_OVER_UNDER" };
+  }
+  return null;
+}
+
+function remapTeamTotal(bridged, marketName) {
+  if (!bridged) return bridged;
+  const team = homeOrAwayOnly(marketName);
+  if (!team) return bridged;
+  if (bridged.market_code !== "OVER_UNDER") return bridged;
+  return {
+    ...bridged,
+    market_code: team === "HOME" ? "TEAM_TOTAL_HOME" : "TEAM_TOTAL_AWAY",
+    params: { ...bridged.params, team },
+  };
+}
+
+function scopedTeamName(catalogue, kind) {
+  const team = homeOrAwayOnly(catalogue?.marketName);
+  if (!team) return null;
+  const period = catalogue?.period;
+  const home = team === "HOME";
+  if (kind === "goals") {
+    if (period === "p1") {
+      return home
+        ? "Home Team Total Goals(1st Half)"
+        : "Away Team Total Goals(1st Half)";
+    }
+    if (period === "p2") {
+      return home
+        ? "Home Team Total Goals(2nd Half)"
+        : "Away Team Total Goals(2nd Half)";
+    }
+    return home ? "Total - Home" : "Total - Away";
+  }
+  if (kind === "corners") {
+    if (period === "p1") {
+      return home
+        ? "Home Total Corners (1st Half)"
+        : "Away Total Corners (1st Half)";
+    }
+    if (period === "p2") {
+      return home
+        ? "Home Total Corners (2nd Half)"
+        : "Away Total Corners (2nd Half)";
+    }
+    return home ? "Home Corners Over/Under" : "Away Corners Over/Under";
+  }
+  if (kind === "cards") {
+    return home ? "Home Team Total Cards" : "Away Team Total Cards";
+  }
+  if (kind === "yellow") {
+    return home ? "Home Team Yellow Cards" : "Away Team Yellow Cards";
+  }
+  return null;
+}
+
+function periodSuffix(period) {
+  if (!period || period === "fulltime") return "";
+  if (period === "p1") return " - First Half";
+  if (period === "p2") return " - Second Half";
+  return ` (${period})`;
+}
+
+function fallbackName(catalogue, marketId) {
+  const base = String(catalogue?.marketName || "").trim();
+  if (!base) return `Market ${Number(marketId) || ""}`.trim();
+  if (/first half|1st half|second half|2nd half/i.test(base)) return base;
+  return `${base}${periodSuffix(catalogue?.period)}`;
+}
+
+function oneXTwoValue(side) {
+  return ONE_X_TWO_VALUES[side] || null;
+}
+
+function spreadValue(side, handicap) {
+  const line = side === "AWAY" ? -Number(handicap) : Number(handicap);
+  const team = side === "HOME" ? "Home" : "Away";
+  return `${team} ${formatHandicap(line)}`.trim();
+}
+
+function displayValue(bridged) {
+  const code = bridged.market_code;
+  const params = bridged.params || {};
+  if (code === "MATCH_WINNER" || code === "HALF_TIME_RESULT" || code === "SECOND_HALF_RESULT"
+      || code === "CORNERS_1X2_FT" || code === "CARDS_1X2_FT") {
+    return oneXTwoValue(params.side);
+  }
+  if (code === "DOUBLE_CHANCE" || code === "DOUBLE_CHANCE_HT" || code === "DOUBLE_CHANCE_SH") {
+    return DC_VALUES[params.combination] || null;
+  }
+  if (code === "BTTS" || code === "BTTS_HT" || code === "BTTS_SH") {
+    return YES_NO_VALUES[params.pick] || null;
+  }
+  if (code === "ODD_EVEN" || code === "ODD_EVEN_HT" || code === "ODD_EVEN_SH") {
+    return OE_VALUES[params.pick] || null;
+  }
+  if (code === "DRAW_NO_BET" || code === "DRAW_NO_BET_HT" || code === "DRAW_NO_BET_SH") {
+    return oneXTwoValue(params.side);
+  }
+  if (
+    code === "OVER_UNDER" ||
+    code === "HT_OVER_UNDER" ||
+    code === "SH_OVER_UNDER" ||
+    code === "CORNERS_OVER_UNDER" ||
+    code === "CARDS_OVER_UNDER" ||
+    code === "TEAM_TOTAL_HOME" ||
+    code === "TEAM_TOTAL_AWAY"
+  ) {
+    return bridged.selection;
+  }
+  if (
+    code === "HANDICAP_ASIAN" ||
+    code === "HANDICAP_ASIAN_HT" ||
+    code === "HANDICAP_ASIAN_SH" ||
+    code === "CORNERS_HANDICAP_ASIAN"
+  ) {
+    return spreadValue(params.side, params.handicap);
+  }
+  if (code === "CORRECT_SCORE" || code === "CORRECT_SCORE_HT") {
+    return bridged.selection;
+  }
+  if (code === "HT_FT") return bridged.selection;
+  return bridged.selection || null;
+}
+
+function outcomeFallback(catalogue, outcomeId, line) {
+  const outcome = label(catalogue, outcomeId) || String(line?.value || outcomeId || "").trim();
+  const lineNum = numericLine(catalogue);
+  const side = overUnderSide(outcome);
+  if (side && lineNum !== null) return ouLabel(side, lineNum);
+  const ah = side1x2(outcome);
+  if (ah && ah !== "DRAW" && lineNum !== null && lineNum !== 0) {
+    return spreadValue(ah, lineNum);
+  }
+  return outcome || String(outcomeId);
+}
+
+function withPlayer(value, line) {
+  const pid = Number(line?.playerId);
+  const playerName = String(line?.playerName || "").trim();
+  if (!Number.isFinite(pid) || pid === 0 || !playerName) return value;
+  return `${playerName} - ${value}`;
+}
+
 /**
- * Map an OddsPapi (marketId, outcomeId) onto the legacy API-Football storage
- * contract: `FixtureMarket.name` + `FixtureOddLine.value`.
+ * Map an OddsPapi (marketId, outcomeId) onto the public storage contract:
+ * `FixtureMarket.name` + `FixtureOddLine.value`. Never returns null for a
+ * priced outcome — unknown families fall back to the catalogue name.
  *
  * @returns {{
- *   market_code: string,
+ *   market_code: string|null,
  *   selection: string,
  *   params: object,
  *   name: string,
  *   value: string,
- * }|null}
+ * }}
  */
-export function legacyMarket(marketId, outcomeId, catalogue) {
-  const bridged = bridgeSelection(marketId, outcomeId, catalogue);
-  if (!bridged || !CUTOVER_CODE_SET.has(bridged.market_code)) return null;
-  if (bridged.market_code === "OVER_UNDER") {
-    const line = Number(bridged.params?.line);
-    // .25 / .75 totals settle HALFWIN/HALFLOSS; TicketSelection has no factor.
-    if (!Number.isFinite(line) || !Number.isInteger(line * 2)) return null;
-  }
-  const name = LEGACY_MARKET_NAMES[bridged.market_code];
-  const value = legacyValue(bridged);
-  if (!name || !value) return null;
-  return { ...bridged, name, value };
+export function publicMarket(marketId, outcomeId, catalogue, line = null) {
+  const kind = statKind(catalogue?.marketName);
+  let bridged = remapStatCode(bridgeSelection(marketId, outcomeId, catalogue), kind);
+  if (kind === "goals") bridged = remapTeamTotal(bridged, catalogue?.marketName);
+  const ouFamily = [
+    "OVER_UNDER",
+    "HT_OVER_UNDER",
+    "SH_OVER_UNDER",
+    "CORNERS_OVER_UNDER",
+    "CARDS_OVER_UNDER",
+    "TEAM_TOTAL_HOME",
+    "TEAM_TOTAL_AWAY",
+  ].includes(bridged?.market_code);
+  let name = ouFamily ? scopedTeamName(catalogue, kind) : null;
+  if (!name && bridged) name = LEGACY_MARKET_NAMES[bridged.market_code] || null;
+  let value = bridged ? displayValue(bridged) : null;
+  if (!name) name = fallbackName(catalogue, marketId);
+  if (!value) value = outcomeFallback(catalogue, outcomeId, line);
+  value = withPlayer(value, line);
+  return {
+    market_code: bridged?.market_code || null,
+    selection: bridged?.selection || value,
+    params: bridged?.params || {},
+    name,
+    value,
+  };
+}
+
+/** @deprecated Use `publicMarket`. Same mapper; name kept for existing callers. */
+export function legacyMarket(marketId, outcomeId, catalogue, line = null) {
+  return publicMarket(marketId, outcomeId, catalogue, line);
 }
 
 /**
@@ -250,14 +658,15 @@ export function legacyMarket(marketId, outcomeId, catalogue) {
 export function legacyMarketsFromLines(lines, marketMap = {}) {
   const byName = new Map();
   for (const line of lines || []) {
-    const legacy = legacyMarket(
+    const mapped = publicMarket(
       line.marketId,
       line.outcomeId,
       marketMap[String(line.marketId)],
+      line,
     );
-    if (!legacy) continue;
-    if (!byName.has(legacy.name)) byName.set(legacy.name, []);
-    byName.get(legacy.name).push({ value: legacy.value, odd: line.price });
+    if (!mapped?.name || !mapped?.value) continue;
+    if (!byName.has(mapped.name)) byName.set(mapped.name, []);
+    byName.get(mapped.name).push({ value: mapped.value, odd: line.price });
   }
   return [...byName.entries()].map(([name, odd_lines]) => ({ name, odd_lines }));
 }

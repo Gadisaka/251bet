@@ -108,7 +108,7 @@ export function isFullyUndecided(counts) {
 
 /**
  * Resolve a ticket leg against a flattened settlements map.
- * Half-stake verdicts stay PENDING: TicketSelection cannot store a factor.
+ * HALFWIN/HALFLOSS return factor 0.5; payout math lives in `legPayoutMultiplier`.
  */
 export function lookupTicketResult(byKey, marketId, outcomeId, playerId = 0) {
   if (marketId == null || outcomeId == null || !byKey) {
@@ -124,14 +124,6 @@ export function lookupTicketResult(byKey, marketId, outcomeId, playerId = 0) {
       result: "PENDING",
       reason: "settlement_undecided",
       factor: 0,
-    };
-  }
-  if (entry.factor === 0.5) {
-    return {
-      result: "PENDING",
-      reason: "half_stake_unsupported",
-      factor: 0.5,
-      providerResult: entry.providerResult,
     };
   }
   return {

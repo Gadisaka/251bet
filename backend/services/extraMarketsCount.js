@@ -1,5 +1,6 @@
 import prisma from "../Config/db.js";
-import { isProviderMarketNameAllowed } from "./markets/marketSupport.js";
+import { isProviderMarketNameAllowed, isOddspapiMarketOfferable } from "./markets/marketSupport.js";
+import { PROVIDER_ODDSPAPI } from "./providers/publicScope.js";
 
 /** Matches list summary + frontend `MAIN_MARKET_NAMES` (non–“extra” markets). */
 export const EXTRA_MARKETS_SUMMARY_NAMES = ["Match Winner", "Double Chance"];
@@ -41,19 +42,29 @@ function isSummaryMarketName(name) {
 }
 
 /**
- * Load markets with lines and keep only allowlisted names (same gate as
- * `dropUnsupportedMarkets` on GET /odds).
+ * Load markets with lines and keep only those the public book may serve.
  */
 async function loadAllowlistedMarketsWithLines(fixtureId) {
-  const markets = await prisma.fixtureMarket.findMany({
-    where: {
-      fixture_id: fixtureId,
-      odd_lines: { some: {} },
-    },
-    include: { odd_lines: true },
-  });
+  const [fixture, markets] = await Promise.all([
+    prisma.fixture.findUnique({
+      where: { id: fixtureId },
+      select: { provider: true },
+    }),
+    prisma.fixtureMarket.findMany({
+      where: {
+        fixture_id: fixtureId,
+        odd_lines: { some: {} },
+      },
+      include: { odd_lines: true },
+    }),
+  ]);
 
-  return markets.filter((market) => isProviderMarketNameAllowed(market?.name));
+  const oddspapi = fixture?.provider === PROVIDER_ODDSPAPI;
+  return markets.filter((market) =>
+    oddspapi
+      ? isOddspapiMarketOfferable(market)
+      : isProviderMarketNameAllowed(market?.name),
+  );
 }
 
 /**

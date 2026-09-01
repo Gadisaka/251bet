@@ -96,6 +96,8 @@ function seedSelection({
   marketCode,
   marketParams = null,
   odds,
+  result = SELECTION_RESULT.PENDING,
+  resultFactor = null,
 }) {
   const store = getStore();
   store.ticketSelection.set(id, {
@@ -107,7 +109,8 @@ function seedSelection({
     market_code: marketCode,
     market_params: marketParams,
     odds,
-    result: SELECTION_RESULT.PENDING,
+    result,
+    result_factor: resultFactor,
   });
 }
 
@@ -839,14 +842,15 @@ test("PENDING legs on terminal tickets (LOST/EXPIRED) are VOIDed so the fixture 
   assert.equal(summary.pendingLegsRemaining, 0);
   assert.equal(summary.gradingCompleted, true);
 
-  // Both legs are resolved (non-pending) to VOID with the terminal reason.
+  // EXPIRED (and other dead statuses except LOST) void leftover legs so the
+  // fixture can complete. LOST tickets still grade — cashback waits on the
+  // last pending leg.
   const legLost = store.ticketSelection.get("sel-lost");
   const legExp = store.ticketSelection.get("sel-exp");
   assert.notEqual(legLost.result, SELECTION_RESULT.PENDING);
   assert.notEqual(legExp.result, SELECTION_RESULT.PENDING);
-  assert.equal(legLost.result, SELECTION_RESULT.VOID);
+  assert.equal(legLost.result, SELECTION_RESULT.WON);
   assert.equal(legExp.result, SELECTION_RESULT.VOID);
-  assert.equal(legLost.result_meta?.reason, "ticket_terminal");
   assert.equal(legExp.result_meta?.reason, "ticket_terminal");
 
   // The dead tickets are untouched: status, payout, refund all unchanged.
@@ -1151,3 +1155,134 @@ test("v3 online LOST ticket credits wallet and persists cashback_amount", async 
   assert.equal(bonusTx.amount, 20);
   assert.equal(store.wallet.get("w-on").balance, 20);
 });
+
+test("HALFWIN single pays (odds+1)/2 and is WON not PENDING", async () => {
+  resetStore();
+  seedTicket({ id: "tk-hw", userId: "u-hw", stake: 100, totalOdds: 3 });
+  seedSelection({
+    id: "sel-hw",
+    ticketId: "tk-hw",
+    fixtureId: "fx-hw",
+    selection: "Home -0.25",
+    marketCode: "HANDICAP_ASIAN",
+    odds: 3,
+    result: SELECTION_RESULT.WON,
+    resultFactor: 0.5,
+  });
+
+  await settlement.recomputeTicketStatus(prisma, "tk-hw");
+  const ticket = getStore().ticket.get("tk-hw");
+  assert.equal(ticket.status, "WON");
+  assert.equal(ticket.potential_win, 200);
+});
+
+test("HALFLOSS single returns half stake as WON", async () => {
+  resetStore();
+  seedTicket({ id: "tk-hl", userId: "u-hl", stake: 80, totalOdds: 1.9 });
+  seedSelection({
+    id: "sel-hl",
+    ticketId: "tk-hl",
+    fixtureId: "fx-hl",
+    selection: "Away +0.25",
+    marketCode: "HANDICAP_ASIAN",
+    odds: 1.9,
+    result: SELECTION_RESULT.LOST,
+    resultFactor: 0.5,
+  });
+
+  await settlement.recomputeTicketStatus(prisma, "tk-hl");
+  const ticket = getStore().ticket.get("tk-hl");
+  assert.equal(ticket.status, "WON");
+  assert.equal(ticket.potential_win, 40);
+});
+
+test("HALFLOSS does not zero a parlay that also has a winner", async () => {
+  resetStore();
+  seedTicket({ id: "tk-mix", userId: "u-mix", stake: 20, totalOdds: 4 });
+  seedSelection({
+    id: "sel-mix-w",
+    ticketId: "tk-mix",
+    fixtureId: "fx-a",
+    selection: "1",
+    marketCode: "MATCH_WINNER",
+    odds: 2,
+    result: SELECTION_RESULT.WON,
+    resultFactor: 1,
+  });
+  seedSelection({
+    id: "sel-mix-hl",
+    ticketId: "tk-mix",
+    fixtureId: "fx-b",
+    selection: "Home -0.25",
+    marketCode: "HANDICAP_ASIAN",
+    odds: 2,
+    result: SELECTION_RESULT.LOST,
+    resultFactor: 0.5,
+  });
+
+  await settlement.recomputeTicketStatus(prisma, "tk-mix");
+  const ticket = getStore().ticket.get("tk-mix");
+  assert.equal(ticket.status, "WON");
+  assert.equal(ticket.potential_win, 20);
+});
+
+test("full LOST still zeros a ticket that also has HALFLOSS", async () => {
+  resetStore();
+  seedTicket({ id: "tk-fl", userId: "u-fl", stake: 50, totalOdds: 6 });
+  seedSelection({
+    id: "sel-fl-l",
+    ticketId: "tk-fl",
+    fixtureId: "fx-c",
+    selection: "1",
+    marketCode: "MATCH_WINNER",
+    odds: 3,
+    result: SELECTION_RESULT.LOST,
+    resultFactor: 1,
+  });
+  seedSelection({
+    id: "sel-fl-hl",
+    ticketId: "tk-fl",
+    fixtureId: "fx-d",
+    selection: "Home -0.25",
+    marketCode: "HANDICAP_ASIAN",
+    odds: 2,
+    result: SELECTION_RESULT.LOST,
+    resultFactor: 0.5,
+  });
+
+  await settlement.recomputeTicketStatus(prisma, "tk-fl");
+  const ticket = getStore().ticket.get("tk-fl");
+  assert.equal(ticket.status, "LOST");
+  assert.equal(ticket.potential_win, 0);
+});
+
+test("HALFWIN mixed with VOID pays the half-win multiplier", async () => {
+  resetStore();
+  seedTicket({ id: "tk-hwv", userId: "u-hwv", stake: 100, totalOdds: 3 });
+  seedSelection({
+    id: "sel-hwv-w",
+    ticketId: "tk-hwv",
+    fixtureId: "fx-hwv-a",
+    selection: "Home -0.25",
+    marketCode: "HANDICAP_ASIAN",
+    odds: 3,
+    result: SELECTION_RESULT.WON,
+    resultFactor: 0.5,
+  });
+  seedSelection({
+    id: "sel-hwv-v",
+    ticketId: "tk-hwv",
+    fixtureId: "fx-hwv-b",
+    selection: "Over 2.5",
+    marketCode: "OVER_UNDER",
+    odds: 1.8,
+    result: SELECTION_RESULT.VOID,
+    resultFactor: 0,
+  });
+
+  await settlement.recomputeTicketStatus(prisma, "tk-hwv");
+  const ticket = getStore().ticket.get("tk-hwv");
+  assert.equal(ticket.status, "WON");
+  assert.equal(ticket.potential_win, 200);
+});
+

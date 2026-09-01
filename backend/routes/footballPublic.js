@@ -9,7 +9,7 @@ import {
 } from "../services/cacheService.js";
 import { api } from "../services/apiSportsService.js";
 import { parseMarkets } from "../utils/oddsParser.js";
-import { isProviderMarketNameAllowed } from "../services/markets/marketSupport.js";
+import { isProviderMarketNameAllowed, isOddspapiMarketOfferable } from "../services/markets/marketSupport.js";
 import { getDailyCallCount } from "../services/apiSportsService.js";
 import { getPreferredBookmakerRecord } from "../services/settingsService.js";
 import { getAllQueues } from "../queues/queues.js";
@@ -174,15 +174,17 @@ function transformLiveOddsForClient(rawLiveOdds) {
 }
 
 /**
- * PHASE-0 settlement gate: drop any market whose provider NAME is not in the
- * active allowlist (unsupported or mis-mapped). Non-bypassable — applied to
- * every odds response so no client can place a market that wouldn't settle.
- * Returns a shallow copy so cached objects are not mutated.
+ * PHASE-0 settlement gate: drop any market that cannot settle.
+ * OddsPapi fixtures serve every priced line with provider ids; other
+ * providers still require an allowlisted name.
  */
 function dropUnsupportedMarkets(fixture) {
   if (!fixture || !Array.isArray(fixture.markets)) return fixture;
+  const oddspapi = fixture.provider === PROVIDER_ODDSPAPI;
   const markets = fixture.markets.filter((m) =>
-    isProviderMarketNameAllowed(m?.name),
+    oddspapi
+      ? isOddspapiMarketOfferable(m)
+      : isProviderMarketNameAllowed(m?.name),
   );
   return { ...fixture, markets };
 }
@@ -543,7 +545,7 @@ const LIVE_FIXTURES_CACHE_TTL = Number(
 
 router.get("/fixtures/live", async (_req, res) => {
   try {
-    const liveCacheKey = `live:fixtures:current:v4:${isOddspapiPublic() ? "oddspapi" : "apifootball"}`;
+    const liveCacheKey = `live:fixtures:current:v5:${isOddspapiPublic() ? "oddspapi" : "apifootball"}`;
     const cached = await getCache(liveCacheKey);
     if (cached) {
       return res.json(cached);
@@ -655,7 +657,7 @@ router.get("/odds/:apiFixtureId", async (req, res) => {
     }
 
     const preferred = await getPreferredBookmakerRecord();
-    const cacheKey = `odds:fixture:${apiFixtureId}:${bookmakerCacheSuffix(preferred)}:${fixturesListCacheModeSuffix()}`;
+    const cacheKey = `odds:fixture:${apiFixtureId}:${bookmakerCacheSuffix(preferred)}:${fixturesListCacheModeSuffix()}:mkts2`;
 
     let data = await getCache(cacheKey);
     if (

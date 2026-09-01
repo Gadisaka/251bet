@@ -72,6 +72,11 @@ import {
   walletSnapshot,
 } from "../lib/walletBalance.js";
 import { evaluatePostponedSettlementWait } from "../lib/postponedSettlement.js";
+import {
+  isFullLoss,
+  legPayoutMultiplier,
+  listedCombinedOdds,
+} from "../lib/selectionPayout.js";
 
 const FINAL_FIXTURE_STATUSES = new Set(["FT", "AET", "PEN", "AWD", "WO"]);
 const VOID_FIXTURE_STATUSES = new Set(["CANC", "ABD", "PST"]);
@@ -156,11 +161,6 @@ function buildV1MatchMatchResult(match) {
   };
 }
 
-function legMultiplier(selection) {
-  if (selection.result === SELECTION_RESULT.VOID) return 1;
-  return Number(selection.odds) || 1;
-}
-
 /**
  * Shadow-mode comparison writer. Never throws, never blocks.
  * Intentionally `prisma`-rooted (not `tx`) so a shadow miss never
@@ -206,11 +206,12 @@ async function recordShadowMismatch({
  * inside a Prisma `$transaction` because it mutates ticket rows.
  *
  * V2 semantics:
- *   - any leg LOST → ticket LOST (precedence, potential_win = 0)
+ *   - any full LOST (factor >= 1) → ticket LOST (potential_win = 0)
+ *   - half-loss (LOST factor 0.5) does not zero the ticket
  *   - all legs VOID → ticket VOID (stake refunded in
  *     `refundOnlineTicketInTx`)
- *   - all legs resolved (mix of WON + VOID) → ticket WON (VOID legs
- *     collapse to 1.0 multiplier)
+ *   - all legs resolved (mix of WON / VOID / half-loss) → ticket WON
+ *     (VOID → 1.0, half-win → (odds+1)/2, half-loss → 0.5)
  *   - else: unchanged
  *
  * @returns {Promise<{ status: string, transitioned: boolean, allVoid: boolean }>}
@@ -234,7 +235,7 @@ export async function recomputeTicketStatus(tx, ticketId) {
     return { status: ticket.status, transitioned: false, allVoid: false };
   }
 
-  const hasLost = selections.some((s) => s.result === SELECTION_RESULT.LOST);
+  const hasFullLost = selections.some((s) => isFullLoss(s));
   const hasPending = selections.some(
     (s) => s.result === SELECTION_RESULT.PENDING,
   );
@@ -244,7 +245,7 @@ export async function recomputeTicketStatus(tx, ticketId) {
   );
 
   let nextStatus = ticket.status;
-  if (hasLost) nextStatus = "LOST";
+  if (hasFullLost) nextStatus = "LOST";
   else if (allVoid) nextStatus = "VOID";
   else if (allResolved) nextStatus = "WON";
 
@@ -252,10 +253,12 @@ export async function recomputeTicketStatus(tx, ticketId) {
     return { status: ticket.status, transitioned: false, allVoid: false };
   }
 
-  const newTotalOdds = selections.reduce(
-    (acc, sel) => acc * legMultiplier(sel),
+  const payoutOdds = selections.reduce(
+    (acc, sel) => acc * legPayoutMultiplier(sel),
     1,
   );
+  const listedOdds = listedCombinedOdds(selections);
+  const newTotalOdds = nextStatus === "LOST" ? listedOdds : payoutOdds;
   const stake = Number(ticket.stake) || 0;
   let newPotentialWin;
   if (nextStatus === "LOST") newPotentialWin = 0;
@@ -466,6 +469,30 @@ async function gradeSelectionsInTx(tx, selections, matchResults, marketResultOve
       continue;
     }
 
+    const parentTicket = await tx.ticket.findUnique({
+      where: { id: sel.ticket_id },
+    });
+    if (
+      parentTicket &&
+      TERMINAL_TICKET_STATUSES.has(parentTicket.status) &&
+      parentTicket.status !== "LOST"
+    ) {
+      await tx.ticketSelection.update({
+        where: { id: sel.id },
+        data: {
+          result: SELECTION_RESULT.VOID,
+          result_meta: { reason: "ticket_terminal" },
+          result_factor: 0,
+        },
+      });
+      updated++;
+      continue;
+    }
+    if (parentTicket && !isTicketSettleable(parentTicket) && parentTicket.status === "OPEN") {
+      pendingAfter++;
+      continue;
+    }
+
     const overrideOutcome = gradeSelectionWithOverride(
       sel,
       marketResultOverrides,
@@ -481,6 +508,7 @@ async function gradeSelectionsInTx(tx, selections, matchResults, marketResultOve
         context.oddspapiByKey,
         sel.provider_market_id,
         sel.provider_outcome_id,
+        sel.provider_player_id ?? 0,
       );
       v2Outcome = evaluateSelectionV2(sel, matchResults.v2);
     } else {
@@ -497,9 +525,12 @@ async function gradeSelectionsInTx(tx, selections, matchResults, marketResultOve
         ? {
             result: v1Outcome?.result || SELECTION_RESULT.PENDING,
             reason: v1Outcome?.reason || null,
+            factor: v1Outcome?.factor,
             meta: {
               engine: "oddspapi",
               reason: v1Outcome?.reason || null,
+              factor: v1Outcome?.factor ?? null,
+              providerResult: v1Outcome?.providerResult || null,
               engineVersion: v1Outcome?.engineVersion ?? 0,
               marketVersion: v1Outcome?.marketVersion ?? 0,
               shadow: v2Outcome
@@ -577,6 +608,12 @@ async function gradeSelectionsInTx(tx, selections, matchResults, marketResultOve
     const updateData = {
       result: merged.result,
       result_meta: merged.meta,
+      result_factor:
+        merged.factor != null
+          ? Number(merged.factor)
+          : merged.result === SELECTION_RESULT.VOID
+            ? 0
+            : 1,
     };
     if (merged.meta?.marketVersion != null) {
       updateData.market_version = merged.meta.marketVersion;

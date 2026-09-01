@@ -31,7 +31,12 @@ import {
   cashbackPayoutRef,
   resolveAccumulatorForNewTicket,
 } from "../lib/bonusEngine.js";
-import { classifySelectionSupport } from "../services/markets/marketSupport.js";
+import {
+  asProviderId,
+  asProviderPlayerId,
+  classifySelectionSupport,
+  isFixtureLegPlaceable,
+} from "../services/markets/marketSupport.js";
 import { validatePlacementSelections } from "../services/odds-engine/validateSelections.js";
 import { validateOpenTicketForPrint, normalizeSnapshotForPrintValidation } from "../services/ticketPrintValidation.js";
 import { getCache, setCache } from "../services/cacheService.js";
@@ -1320,31 +1325,16 @@ function normalizePrebookSelectionsInput(selections = []) {
         : null;
       const marketLabel = String(item?.marketLabel || "").trim();
       const label = String(item?.label || "").trim();
-      let marketCode;
-      let marketParams;
 
-      // PHASE-0 PLACEMENT GUARD (engine-independent). A leg may only be stored
-      // if it resolves to a real settlement grader, the name↔code mapping is
-      // consistent (blocks the mis-mapped markets), and the code is allowlisted
-      // for the active phase. This closes the null-`market_code` hole that
-      // produced unsettleable + mis-graded tickets.
+      // Attach a canonical code when the name maps to a V2 grader (shadow +
+      // display). Unknown OddsPapi names are still placeable once the frozen
+      // odd line has provider ids — see `collectUnplaceableFixtureLegs`.
       const support = classifySelectionSupport(
         { marketCode: explicitMarketCode, marketLabel, selection: label, label, marketParams: item?.marketParams },
-        { mode: "strict" },
+        { mode: "lenient" },
       );
-      if (!support.ok) {
-        validationErrors.push({
-          index: idx,
-          code: support.reason || "market_not_supported",
-          field: "marketCode",
-          marketLabel,
-          label,
-          details: null,
-        });
-        return null;
-      }
-      marketCode = support.code;
-      marketParams = support.params;
+      const marketCode = support.ok ? support.code : explicitMarketCode;
+      const marketParams = support.ok ? support.params : (item?.marketParams || null);
 
       const accepted = Number(item?.acceptedOdds);
       const submitted = Number(item?.odds);
@@ -1380,6 +1370,40 @@ function normalizePrebookSelectionsInput(selections = []) {
     );
 
   return { normalizedSelections, validationErrors };
+}
+
+function collectUnplaceableFixtureLegs(normalizedSelections, resolved) {
+  const byIndex = new Map((resolved || []).map((row) => [row.index, row]));
+  const errors = [];
+  for (const item of normalizedSelections || []) {
+    const row = byIndex.get(item.index);
+    const strict = classifySelectionSupport(
+      {
+        marketCode: item.marketCode,
+        marketLabel: item.marketLabel,
+        selection: item.label,
+        label: item.label,
+        marketParams: item.marketParams,
+      },
+      { mode: "strict" },
+    );
+    const placeable = isFixtureLegPlaceable({
+      support: strict,
+      providerMarketId: row?.providerMarketId,
+      providerOutcomeId: row?.providerOutcomeId,
+    });
+    if (!placeable.ok) {
+      errors.push({
+        index: item.index,
+        code: placeable.reason || "market_not_supported",
+        field: "marketCode",
+        marketLabel: item.marketLabel || null,
+        label: item.label || null,
+        details: null,
+      });
+    }
+  }
+  return errors;
 }
 
 function parseAcceptOddsChanges(value) {
@@ -1528,6 +1552,17 @@ export async function validatePrebookTicket(req, res) {
         ok: false,
         code: validated.code || "validation_failed",
         selections: validated.selections || [],
+      });
+    }
+
+    const unplaceableValidate = collectUnplaceableFixtureLegs(
+      normalizedSelections,
+      validated.resolved,
+    );
+    if (unplaceableValidate.length) {
+      return res.status(400).json({
+        code: "invalid_selections",
+        details: unplaceableValidate,
       });
     }
 
@@ -1742,6 +1777,24 @@ export async function createPrebookTicket(req, res) {
       });
     }
 
+    const unplaceablePlace = collectUnplaceableFixtureLegs(
+      normalizedSelections,
+      validated.resolved,
+    );
+    if (unplaceablePlace.length) {
+      await logValidationFailure({
+        action: "TICKET_PLACE_VALIDATION_FAILED",
+        req,
+        code: "market_not_supported",
+        meta: { selections: unplaceablePlace },
+      });
+      return res.status(400).json({
+        code: "invalid_selections",
+        error: "invalid_selections",
+        details: unplaceablePlace,
+      });
+    }
+
     // Explicit confirmation is required whenever the client is placing
     // after a previous odds_changed response. Clients should set
     // acceptOddsChanges=true on confirmed re-submit.
@@ -1773,6 +1826,7 @@ export async function createPrebookTicket(req, res) {
         serverLive: Boolean(row?.serverLive),
         providerMarketId: row?.providerMarketId ?? null,
         providerOutcomeId: row?.providerOutcomeId ?? null,
+        providerPlayerId: row?.providerPlayerId ?? 0,
       };
     });
     const totalOdds = Number(validated.totalOdds || 0);
@@ -1822,12 +1876,9 @@ export async function createPrebookTicket(req, res) {
         ? Number(item.serverMarketVersion)
         : null,
       live_at_placement: Boolean(item.serverLive),
-      provider_market_id: Number.isFinite(Number(item.providerMarketId))
-        ? Number(item.providerMarketId)
-        : null,
-      provider_outcome_id: Number.isFinite(Number(item.providerOutcomeId))
-        ? Number(item.providerOutcomeId)
-        : null,
+      provider_market_id: asProviderId(item.providerMarketId),
+      provider_outcome_id: asProviderId(item.providerOutcomeId),
+      provider_player_id: asProviderPlayerId(item.providerPlayerId),
       result: "PENDING",
     }));
 
@@ -3927,6 +3978,17 @@ export async function addTicketSelection(req, res) {
       });
     }
 
+    const unplaceableAdd = collectUnplaceableFixtureLegs(
+      [incoming],
+      validated.resolved,
+    );
+    if (unplaceableAdd.length) {
+      return res.status(400).json({
+        message: "Invalid selection",
+        errors: unplaceableAdd,
+      });
+    }
+
     const resolved = (validated.resolved || [])[0];
     const lockedSelection = {
       ...incoming,
@@ -3939,6 +4001,7 @@ export async function addTicketSelection(req, res) {
       serverUpdatedAt: resolved?.serverUpdatedAt || null,
       providerMarketId: resolved?.providerMarketId ?? null,
       providerOutcomeId: resolved?.providerOutcomeId ?? null,
+      providerPlayerId: resolved?.providerPlayerId ?? 0,
     };
 
     const snapshot = Array.isArray(ticket.selection_snapshot)
@@ -4006,12 +4069,9 @@ export async function addTicketSelection(req, res) {
         ? Number(lockedSelection.serverMarketVersion)
         : null,
       live_at_placement: Boolean(lockedSelection.fromLive),
-      provider_market_id: Number.isFinite(Number(lockedSelection.providerMarketId))
-        ? Number(lockedSelection.providerMarketId)
-        : null,
-      provider_outcome_id: Number.isFinite(Number(lockedSelection.providerOutcomeId))
-        ? Number(lockedSelection.providerOutcomeId)
-        : null,
+      provider_market_id: asProviderId(lockedSelection.providerMarketId),
+      provider_outcome_id: asProviderId(lockedSelection.providerOutcomeId),
+      provider_player_id: asProviderPlayerId(lockedSelection.providerPlayerId),
       result: "PENDING",
     };
 
