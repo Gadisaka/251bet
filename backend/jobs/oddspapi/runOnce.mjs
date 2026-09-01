@@ -22,6 +22,7 @@ async function main() {
   const odds = await runOddspapiOdds({ tier: "hot" });
   console.log("odds", odds);
   await prisma.$disconnect();
+  process.exit(0);
 }
 
 main().catch(async (err) => {
