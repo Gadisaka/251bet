@@ -3,6 +3,7 @@ import { getCache, setCache, TTL } from "./cacheService.js";
 import { getPreferredBookmakerRecord } from "./settingsService.js";
 import { isPublicFixturesStrictBookmaker } from "../Config/ingestionConfig.js";
 import { getLeagueRank } from "../Config/leagueRanks.js";
+import { notOddspapiWhere } from "./providers/publicScope.js";
 
 /** Slim list endpoint GET /fixtures?date= — Match Winner + Double Chance only. */
 const FIXTURES_SUMMARY_ODD_LINES_PER_MARKET = Number(
@@ -19,7 +20,7 @@ const UPCOMING_MIN_START_BUFFER_MINUTES = 5;
 const UPCOMING_ALLOWED_STATUSES = new Set(["NS", "TBD"]);
 
 /** Bumped when list payload / query semantics change (slim select, no bookmaker join). */
-export const FIXTURES_BY_DATE_CACHE_VERSION = "v5";
+export const FIXTURES_BY_DATE_CACHE_VERSION = "v6";
 
 const MAIN_MARKET_NAMES = [
   "Match Winner",
@@ -281,7 +282,7 @@ export async function buildFixturesByDate(ymd, { preferred } = {}) {
     where: {
       start_time: { gte: rangeStart, lte: rangeEnd },
       status: { in: [...UPCOMING_ALLOWED_STATUSES] },
-      provider: { not: "oddspapi" },
+      ...notOddspapiWhere(),
       // Skip unpriced fixtures in Mongo instead of loading them then filtering.
       markets: {
         some: {

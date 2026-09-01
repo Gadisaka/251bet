@@ -1,6 +1,7 @@
 import { resolveMarketState } from "./marketState.js";
 import { buildPrematchMarketVersion } from "./versioning.js";
 import { perfTimed } from "../../lib/perfTiming.js";
+import { PROVIDER_ODDSPAPI } from "../providers/publicScope.js";
 
 function kickoffInPast(startTime, now = new Date()) {
   if (!startTime) return false;
@@ -386,6 +387,7 @@ export async function resolvePrematchOdds({
         api_fixture_id: true,
         status: true,
         start_time: true,
+        provider: true,
       },
     }),
   );
@@ -430,6 +432,17 @@ export async function resolvePrematchOdds({
       resolved.push({
         index: sel.index,
         code: "unknown_fixture",
+      });
+      continue;
+    }
+    // Stage 1 cutover: OddsPapi fixtures are served read-only. Placement
+    // is refused until settlement is wired (Stage 2).
+    if (fixture.provider === PROVIDER_ODDSPAPI) {
+      resolved.push({
+        index: sel.index,
+        code: "oddspapi_not_offerable",
+        fixtureId: fixture.id,
+        apiFixtureId: fixture.api_fixture_id,
       });
       continue;
     }

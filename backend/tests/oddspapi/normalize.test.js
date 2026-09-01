@@ -131,7 +131,7 @@ test("quota freeze blocks all odds tiers; critical drops cold/warm", () => {
   assert.equal(allowOddsTier("normal", "cold"), true);
 });
 
-test("public queries exclude oddspapi", () => {
+test("public queries exclude oddspapi by default", () => {
   const where = andNotOddspapi({ status: "NS" });
   assert.equal(where.AND[1].provider.not, PROVIDER_ODDSPAPI);
 });

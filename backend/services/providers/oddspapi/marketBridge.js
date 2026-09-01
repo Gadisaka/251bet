@@ -173,3 +173,68 @@ export function bridgeSelection(marketId, outcomeId, catalogue) {
 export function bridgedFamilies() {
   return [...FAMILIES.keys()];
 }
+
+/**
+ * The four codes the `today` allowlist offers. Anything else the bridge can
+ * grade (DNB, odd/even, HT) is kept off the public book until that phase
+ * expands.
+ */
+export const CUTOVER_CODES = Object.freeze([
+  "MATCH_WINNER",
+  "DOUBLE_CHANCE",
+  "BTTS",
+  "OVER_UNDER",
+]);
+
+const CUTOVER_CODE_SET = new Set(CUTOVER_CODES);
+
+/** Exact strings `fixturesListService` and `PROVIDER_NAME_TO_CODE` expect. */
+export const LEGACY_MARKET_NAMES = Object.freeze({
+  MATCH_WINNER: "Match Winner",
+  DOUBLE_CHANCE: "Double Chance",
+  BTTS: "Both Teams Score",
+  OVER_UNDER: "Goals Over/Under",
+});
+
+const LEGACY_VALUES = Object.freeze({
+  MATCH_WINNER: Object.freeze({ HOME: "Home", DRAW: "Draw", AWAY: "Away" }),
+  DOUBLE_CHANCE: Object.freeze({
+    "1X": "Home/Draw",
+    "12": "Home/Away",
+    X2: "Draw/Away",
+  }),
+  BTTS: Object.freeze({ YES: "Yes", NO: "No" }),
+});
+
+function legacyValue(bridged) {
+  if (bridged.market_code === "OVER_UNDER") return bridged.selection;
+  const table = LEGACY_VALUES[bridged.market_code];
+  if (!table) return null;
+  if (bridged.market_code === "MATCH_WINNER") return table[bridged.params.side] || null;
+  if (bridged.market_code === "DOUBLE_CHANCE") {
+    return table[bridged.params.combination] || null;
+  }
+  if (bridged.market_code === "BTTS") return table[bridged.params.pick] || null;
+  return null;
+}
+
+/**
+ * Map an OddsPapi (marketId, outcomeId) onto the legacy API-Football storage
+ * contract: `FixtureMarket.name` + `FixtureOddLine.value`.
+ *
+ * @returns {{
+ *   market_code: string,
+ *   selection: string,
+ *   params: object,
+ *   name: string,
+ *   value: string,
+ * }|null}
+ */
+export function legacyMarket(marketId, outcomeId, catalogue) {
+  const bridged = bridgeSelection(marketId, outcomeId, catalogue);
+  if (!bridged || !CUTOVER_CODE_SET.has(bridged.market_code)) return null;
+  const name = LEGACY_MARKET_NAMES[bridged.market_code];
+  const value = legacyValue(bridged);
+  if (!name || !value) return null;
+  return { ...bridged, name, value };
+}

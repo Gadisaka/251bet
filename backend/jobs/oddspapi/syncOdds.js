@@ -2,8 +2,9 @@ import prisma from "../../Config/db.js";
 import { upsertNoTx } from "../../utils/upsertNoTx.js";
 import { getOddspapiConfig, PROVIDER } from "../../services/providers/oddspapi/config.js";
 import { getOddsByTournaments } from "../../services/providers/oddspapi/endpoints.js";
-import { flattenOdds, marketStorageName, normalizeFixture } from "../../services/providers/oddspapi/normalize.js";
+import { flattenOdds, normalizeFixture } from "../../services/providers/oddspapi/normalize.js";
 import { quotaSnapshot, allowOddsTier } from "../../services/providers/oddspapi/quota.js";
+import { legacyMarket } from "../../services/providers/oddspapi/marketBridge.js";
 import { recomputeExtraMarketsCountForFixture } from "../../services/extraMarketsCount.js";
 import { ingestFixtureList } from "./syncFixtures.js";
 import { chunkIds, loadMarketMap, shadowStatsIncr } from "./cache.js";
@@ -26,36 +27,50 @@ async function resolveBookmaker(slug) {
   });
 }
 
+async function dropProviderShapedMarkets(fixtureId) {
+  const markets = await prisma.fixtureMarket.findMany({
+    where: { fixture_id: fixtureId },
+    select: { id: true, name: true },
+  });
+  const staleIds = markets.filter((m) => /^\d+:/.test(m.name)).map((m) => m.id);
+  if (!staleIds.length) return 0;
+  await prisma.fixtureMarket.deleteMany({ where: { id: { in: staleIds } } });
+  return staleIds.length;
+}
+
 async function persistLines(fixtureRow, lines, bookmaker, marketMap) {
-  const byMarket = new Map();
+  await dropProviderShapedMarkets(fixtureRow.id);
+
+  const byName = new Map();
   for (const line of lines) {
-    if (!byMarket.has(line.marketId)) byMarket.set(line.marketId, []);
-    byMarket.get(line.marketId).push(line);
+    const cat = marketMap[String(line.marketId)];
+    const legacy = legacyMarket(line.marketId, line.outcomeId, cat);
+    if (!legacy) continue;
+    if (!byName.has(legacy.name)) byName.set(legacy.name, []);
+    byName.get(legacy.name).push({ line, legacy });
   }
-  for (const [marketId, group] of byMarket) {
-    const cat = marketMap[String(marketId)];
-    if (cat?.playerProp) continue;
-    const name = marketStorageName(marketId, cat?.marketName);
+
+  for (const [name, group] of byName) {
     const market = await upsertNoTx(prisma.fixtureMarket, {
       where: { fixture_id_name: { fixture_id: fixtureRow.id, name } },
-      update: { provider_market_id: marketId },
+      update: {},
       create: {
         fixture_id: fixtureRow.id,
         name,
-        provider_market_id: marketId,
       },
     });
-    for (const line of group) {
+    for (const { line, legacy } of group) {
       await upsertNoTx(prisma.fixtureOddLine, {
         where: {
           market_id_bookmaker_id_value: {
             market_id: market.id,
             bookmaker_id: bookmaker.id,
-            value: line.value,
+            value: legacy.value,
           },
         },
         update: {
           odd: line.price,
+          provider_market_id: line.marketId,
           provider_outcome_id: line.outcomeId,
           provider_player_id: line.playerId,
           active: line.active,
@@ -65,8 +80,9 @@ async function persistLines(fixtureRow, lines, bookmaker, marketMap) {
         create: {
           market_id: market.id,
           bookmaker_id: bookmaker.id,
-          value: line.value,
+          value: legacy.value,
           odd: line.price,
+          provider_market_id: line.marketId,
           provider_outcome_id: line.outcomeId,
           provider_player_id: line.playerId,
           active: line.active,

@@ -10,6 +10,8 @@ import {
   bridgeSelection,
   familyKey,
   isBridgeable,
+  legacyMarket,
+  LEGACY_MARKET_NAMES,
 } from "../../services/providers/oddspapi/marketBridge.js";
 import { normalizeScores } from "../../services/providers/oddspapi/normalize.js";
 import { evaluateSelection } from "../../services/marketEvaluatorV2.js";
@@ -199,6 +201,92 @@ test("bridge special-cases market 104, whose catalogue marketType varies", () =>
 test("bridge returns null for an outcome id missing from the catalogue", () => {
   assert.equal(bridgeSelection(101, 999, CATALOGUE[101]), null);
   assert.equal(bridgeSelection(101, 102, undefined), null);
+});
+
+test("legacyMarket emits the exact API-Football storage strings", () => {
+  assert.deepEqual(legacyMarket(101, 101, CATALOGUE[101]), {
+    market_code: "MATCH_WINNER",
+    selection: "1",
+    params: { side: "HOME" },
+    name: "Match Winner",
+    value: "Home",
+  });
+  assert.deepEqual(legacyMarket(101, 102, CATALOGUE[101]), {
+    market_code: "MATCH_WINNER",
+    selection: "X",
+    params: { side: "DRAW" },
+    name: "Match Winner",
+    value: "Draw",
+  });
+  assert.deepEqual(legacyMarket(101, 103, CATALOGUE[101]), {
+    market_code: "MATCH_WINNER",
+    selection: "2",
+    params: { side: "AWAY" },
+    name: "Match Winner",
+    value: "Away",
+  });
+  assert.deepEqual(legacyMarket(101902, 101902, CATALOGUE[101902]), {
+    market_code: "DOUBLE_CHANCE",
+    selection: "1X",
+    params: { combination: "1X" },
+    name: "Double Chance",
+    value: "Home/Draw",
+  });
+  assert.deepEqual(legacyMarket(101902, 101903, CATALOGUE[101902]), {
+    market_code: "DOUBLE_CHANCE",
+    selection: "12",
+    params: { combination: "12" },
+    name: "Double Chance",
+    value: "Home/Away",
+  });
+  assert.deepEqual(legacyMarket(101902, 101904, CATALOGUE[101902]), {
+    market_code: "DOUBLE_CHANCE",
+    selection: "X2",
+    params: { combination: "X2" },
+    name: "Double Chance",
+    value: "Draw/Away",
+  });
+  assert.deepEqual(legacyMarket(104, 104, CATALOGUE[104]), {
+    market_code: "BTTS",
+    selection: "YES",
+    params: { pick: "YES" },
+    name: "Both Teams Score",
+    value: "Yes",
+  });
+  assert.deepEqual(legacyMarket(104, 105, CATALOGUE[104]), {
+    market_code: "BTTS",
+    selection: "NO",
+    params: { pick: "NO" },
+    name: "Both Teams Score",
+    value: "No",
+  });
+  assert.deepEqual(legacyMarket(106, 106, CATALOGUE[106]), {
+    market_code: "OVER_UNDER",
+    selection: "Over 0.5",
+    params: { side: "OVER", line: 0.5 },
+    name: "Goals Over/Under",
+    value: "Over 0.5",
+  });
+  assert.deepEqual(legacyMarket(106, 107, CATALOGUE[106]), {
+    market_code: "OVER_UNDER",
+    selection: "Under 0.5",
+    params: { side: "UNDER", line: 0.5 },
+    name: "Goals Over/Under",
+    value: "Under 0.5",
+  });
+});
+
+test("legacyMarket names match the public list allowlist byte-for-byte", () => {
+  const offered = new Set(Object.values(LEGACY_MARKET_NAMES));
+  for (const name of ["Match Winner", "Double Chance", "Both Teams Score", "Goals Over/Under"]) {
+    assert.equal(offered.has(name), true, name);
+  }
+});
+
+test("legacyMarket refuses markets outside the today allowlist", () => {
+  assert.equal(legacyMarket(10214, 10214, CATALOGUE[10214]), null);
+  assert.equal(legacyMarket(1070, 1070, CATALOGUE[1070]), null);
+  assert.equal(legacyMarket(10730, 10730, CATALOGUE[10730]), null);
 });
 
 test("normalizeScores reads NAMED periods, not positional ones", () => {

@@ -379,6 +379,7 @@ model FixtureOddLine {
   odd          Float
   market_id    String
   bookmaker_id String
+  provider_market_id  Int?
   provider_outcome_id Int?
   provider_player_id  Int      @default(0)
   active              Boolean  @default(true)

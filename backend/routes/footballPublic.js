@@ -25,7 +25,8 @@ import {
   pickTopActiveLeagues,
 } from "../Config/leagueRanks.js";
 import { recomputeExtraMarketsCountForFixture } from "../services/extraMarketsCount.js";
-import { isOddspapiRow, notOddspapiWhere } from "../services/providers/publicScope.js";
+import { isOddspapiRow, notOddspapiWhere, PROVIDER_ODDSPAPI } from "../services/providers/publicScope.js";
+import { isOddspapiPublic } from "../services/providers/activeProvider.js";
 import {
   attachLeagueRanksToList,
   bookmakerCacheSuffix,
@@ -444,7 +445,7 @@ router.get("/sidebar-leagues", async (_req, res) => {
 router.get("/fixtures/today", async (_req, res) => {
   try {
     const preferred = await getPreferredBookmakerRecord();
-    const cacheKey = `fixtures:today:v4:${bookmakerCacheSuffix(preferred)}:${fixturesListCacheModeSuffix()}`;
+    const cacheKey = `fixtures:today:v5:${bookmakerCacheSuffix(preferred)}:${fixturesListCacheModeSuffix()}`;
 
     let data = await getCache(cacheKey);
     if (!data) {
@@ -490,7 +491,7 @@ router.get("/fixtures/upcoming", async (req, res) => {
         );
 
     const preferred = await getPreferredBookmakerRecord();
-    const cacheKey = `fixtures:upcoming:v6:${days}d:${bookmakerCacheSuffix(preferred)}:${fixturesListCacheModeSuffix()}`;
+    const cacheKey = `fixtures:upcoming:v7:${days}d:${bookmakerCacheSuffix(preferred)}:${fixturesListCacheModeSuffix()}`;
 
     let data = await getCache(cacheKey);
     if (!data) {
@@ -541,10 +542,29 @@ const LIVE_FIXTURES_CACHE_TTL = Number(
 
 router.get("/fixtures/live", async (_req, res) => {
   try {
-    const liveCacheKey = "live:fixtures:current:v3";
+    const liveCacheKey = `live:fixtures:current:v3:${isOddspapiPublic() ? "oddspapi" : "apifootball"}`;
     const cached = await getCache(liveCacheKey);
     if (cached) {
       return res.json(cached);
+    }
+
+    if (isOddspapiPublic()) {
+      const rows = await prisma.fixture.findMany({
+        where: {
+          status: { in: ["LIVE", "HT"] },
+          ...notOddspapiWhere(),
+        },
+        take: LIVE_FIXTURES_LIMIT,
+        include: {
+          home_team: true,
+          away_team: true,
+          league: true,
+        },
+        orderBy: { start_time: "asc" },
+      });
+      const payload = attachLeagueRanksToList(sortFixturesByLeagueRank(rows));
+      await setCache(liveCacheKey, payload, LIVE_FIXTURES_CACHE_TTL);
+      return res.json(payload);
     }
 
     let liveOdds;
@@ -601,6 +621,38 @@ router.get("/fixtures/live", async (_req, res) => {
  */
 router.get("/odds/live", async (_req, res) => {
   try {
+    if (isOddspapiPublic()) {
+      const preferred = await getPreferredBookmakerRecord();
+      const rows = await prisma.fixture.findMany({
+        where: {
+          status: { in: ["LIVE", "HT"] },
+          ...notOddspapiWhere(),
+        },
+        take: LIVE_FIXTURES_LIMIT,
+        include: {
+          markets: buildMarketsInclude(preferred?.id),
+        },
+        orderBy: { start_time: "asc" },
+      });
+      const payload = rows.map((fx) => {
+        const gated = dropUnsupportedMarkets(fx);
+        return {
+          api_fixture_id: fx.api_fixture_id,
+          status: fx.status,
+          elapsed: null,
+          home_score: fx.home_score,
+          away_score: fx.away_score,
+          markets: (gated.markets || []).map((m) => ({
+            name: m.name,
+            odd_lines: (m.odd_lines || []).map((ol) => ({
+              value: ol.value,
+              odd: ol.odd,
+            })),
+          })),
+        };
+      });
+      return res.json(payload);
+    }
     const liveOdds = await getTransformedLiveOddsCoalesced();
     res.json(liveOdds);
   } catch (e) {
@@ -654,7 +706,8 @@ router.get("/odds/:apiFixtureId", async (req, res) => {
       const hasAnyMarkets = stripEmptyMarkets(fixture).markets.length > 0;
       const shouldRefreshLegacyMarkets =
         hasAnyMarkets && isLegacyOnlyFixtureMarkets(fixture.markets);
-      if (!hasAnyMarkets || shouldRefreshLegacyMarkets) {
+      const isOddsPapi = fixture.provider === PROVIDER_ODDSPAPI;
+      if (!isOddsPapi && (!hasAnyMarkets || shouldRefreshLegacyMarkets)) {
         const inflightKey = `${apiFixtureId}:${preferred?.api_bookmaker_id ?? "all"}`;
         let hydrationPromise = oddsHydrationInflight.get(inflightKey);
         if (!hydrationPromise) {
