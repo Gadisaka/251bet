@@ -130,6 +130,7 @@ export default async function syncOdds(options = {}) {
     const baseWhere = {
       start_time: { gte: start, lte: end },
       league: { sport: { slug: { in: enabled } } },
+      provider: { not: "oddspapi" },
     };
     const selectFields = {
       id: true,

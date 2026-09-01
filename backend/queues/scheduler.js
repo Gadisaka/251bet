@@ -7,6 +7,7 @@ import {
   getFixturesDaysBehind,
   getLookbackIntervalHours,
 } from "../Config/ingestionConfig.js";
+import { isOddspapiShadowEnabled } from "../services/providers/oddspapi/config.js";
 
 /**
  * Owns the cadence of recurring background work.
@@ -57,7 +58,7 @@ function toJobId(name) {
 }
 
 function buildRepeatables() {
-  return [
+  const jobs = [
     {
       queue: QUEUE_NAMES.LIVE,
       name: REPEATABLE_JOB_NAMES.LIVE_TICK,
@@ -187,6 +188,77 @@ function buildRepeatables() {
       },
     },
   ];
+
+  if (isOddspapiShadowEnabled()) {
+    const q = QUEUE_NAMES.ODDSPAPI_SHADOW;
+    jobs.push(
+      {
+        queue: q,
+        name: REPEATABLE_JOB_NAMES.ODDSPAPI_CATALOGUE,
+        data: {},
+        opts: {
+          repeat: { every: envMinutes("ODDSPAPI_CATALOGUE_MINUTES", 60 * MINUTES) },
+          jobId: toJobId(REPEATABLE_JOB_NAMES.ODDSPAPI_CATALOGUE),
+        },
+      },
+      {
+        queue: q,
+        name: REPEATABLE_JOB_NAMES.ODDSPAPI_FIXTURES_NEAR,
+        data: {},
+        opts: {
+          repeat: { every: envMinutes("ODDSPAPI_FIXTURES_NEAR_MINUTES", 30 * MINUTES) },
+          jobId: toJobId(REPEATABLE_JOB_NAMES.ODDSPAPI_FIXTURES_NEAR),
+        },
+      },
+      {
+        queue: q,
+        name: REPEATABLE_JOB_NAMES.ODDSPAPI_FIXTURES_FUTURE,
+        data: {},
+        opts: {
+          repeat: { every: getDeepFixtureIntervalHours() * HOURS },
+          jobId: toJobId(REPEATABLE_JOB_NAMES.ODDSPAPI_FIXTURES_FUTURE),
+        },
+      },
+      {
+        queue: q,
+        name: REPEATABLE_JOB_NAMES.ODDSPAPI_FIXTURES_LOOKBACK,
+        data: {},
+        opts: {
+          repeat: { every: getLookbackIntervalHours() * HOURS },
+          jobId: toJobId(REPEATABLE_JOB_NAMES.ODDSPAPI_FIXTURES_LOOKBACK),
+        },
+      },
+      {
+        queue: q,
+        name: REPEATABLE_JOB_NAMES.ODDSPAPI_ODDS_HOT,
+        data: {},
+        opts: {
+          repeat: { every: envMinutes("ODDSPAPI_ODDS_HOT_MINUTES", 15 * MINUTES) },
+          jobId: toJobId(REPEATABLE_JOB_NAMES.ODDSPAPI_ODDS_HOT),
+        },
+      },
+      {
+        queue: q,
+        name: REPEATABLE_JOB_NAMES.ODDSPAPI_ODDS_WARM,
+        data: {},
+        opts: {
+          repeat: { every: envMinutes("ODDSPAPI_ODDS_WARM_MINUTES", 60 * MINUTES) },
+          jobId: toJobId(REPEATABLE_JOB_NAMES.ODDSPAPI_ODDS_WARM),
+        },
+      },
+      {
+        queue: q,
+        name: REPEATABLE_JOB_NAMES.ODDSPAPI_ODDS_COLD,
+        data: {},
+        opts: {
+          repeat: { every: envMinutes("ODDSPAPI_ODDS_COLD_MINUTES", 6 * 60 * MINUTES) },
+          jobId: toJobId(REPEATABLE_JOB_NAMES.ODDSPAPI_ODDS_COLD),
+        },
+      },
+    );
+  }
+
+  return jobs;
 }
 
 function isSameRepeatable(job, spec) {

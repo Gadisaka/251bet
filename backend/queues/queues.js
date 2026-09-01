@@ -17,6 +17,7 @@ export const QUEUE_NAMES = {
   SETTLEMENT_RETRY: "settlement-retry",
   EXPIRE_UNPAID_TICKETS: "expire-unpaid-tickets",
   HOLD_REAPER: "hold-reaper",
+  ODDSPAPI_SHADOW: "oddspapi-shadow",
 };
 
 export const REPEATABLE_JOB_NAMES = {
@@ -30,6 +31,13 @@ export const REPEATABLE_JOB_NAMES = {
   SETTLEMENT_RETRY: "settlement:retry",
   EXPIRE_UNPAID_TICKETS: "tickets:expire-unpaid",
   HOLD_REAPER_TICK: "hold-reaper:tick",
+  ODDSPAPI_CATALOGUE: "oddspapi:catalogue",
+  ODDSPAPI_FIXTURES_NEAR: "oddspapi:fixtures-near",
+  ODDSPAPI_FIXTURES_FUTURE: "oddspapi:fixtures-future",
+  ODDSPAPI_FIXTURES_LOOKBACK: "oddspapi:fixtures-lookback",
+  ODDSPAPI_ODDS_HOT: "oddspapi:odds-hot",
+  ODDSPAPI_ODDS_WARM: "oddspapi:odds-warm",
+  ODDSPAPI_ODDS_COLD: "oddspapi:odds-cold",
 };
 
 const DEFAULT_JOB_OPTIONS = {

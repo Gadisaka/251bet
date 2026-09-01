@@ -277,10 +277,11 @@ export async function buildFixturesByDate(ymd, { preferred } = {}) {
     select: { id: true, value: true, odd: true },
   };
 
-  const rows = await prisma.fixture.findMany({
+        const rows = await prisma.fixture.findMany({
     where: {
       start_time: { gte: rangeStart, lte: rangeEnd },
       status: { in: [...UPCOMING_ALLOWED_STATUSES] },
+      provider: { not: "oddspapi" },
       // Skip unpriced fixtures in Mongo instead of loading them then filtering.
       markets: {
         some: {

@@ -42,7 +42,10 @@ async function needsFixtureHorizonBackfill(days) {
   const { start, end } = startEndUtcWindow(days);
   try {
     const n = await prisma.fixture.count({
-      where: { start_time: { gte: start, lte: end } },
+      where: {
+        start_time: { gte: start, lte: end },
+        provider: { not: "oddspapi" },
+      },
     });
     return n === 0;
   } catch (err) {

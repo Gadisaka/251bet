@@ -17,6 +17,12 @@ import { processLeaguesMeta } from "./queues/processors/leaguesMeta.js";
 import { processSettlementRetry } from "./queues/processors/settlementRetry.js";
 import { processExpireUnpaidTickets } from "./queues/processors/expireUnpaidTickets.js";
 import { processHoldReaper } from "./queues/processors/holdReaper.js";
+import { processOddspapiShadow } from "./queues/processors/oddspapiShadow.js";
+import { isOddspapiShadowEnabled } from "./services/providers/oddspapi/config.js";
+import {
+  connect as connectOddspapiWs,
+  disconnect as disconnectOddspapiWs,
+} from "./jobs/oddspapi/websocket.js";
 
 /**
  * Worker process entry point.
@@ -39,6 +45,7 @@ const PROCESSOR_REGISTRY = {
   [QUEUE_NAMES.SETTLEMENT_RETRY]: processSettlementRetry,
   [QUEUE_NAMES.EXPIRE_UNPAID_TICKETS]: processExpireUnpaidTickets,
   [QUEUE_NAMES.HOLD_REAPER]: processHoldReaper,
+  [QUEUE_NAMES.ODDSPAPI_SHADOW]: processOddspapiShadow,
 };
 
 const workers = [];
@@ -92,6 +99,7 @@ async function shutdown(signal) {
   console.log(`[worker] received ${signal}, shutting down…`);
   try {
     await stopScheduler();
+    await disconnectOddspapiWs();
     await Promise.all(workers.map((w) => w.close().catch(() => {})));
     await closeQueues();
     await closeQueueConnections();
@@ -122,6 +130,10 @@ async function main() {
   }
 
   await startScheduler();
+  if (isOddspapiShadowEnabled()) {
+    await connectOddspapiWs();
+    console.log("[worker] OddsPapi shadow WebSocket starting");
+  }
   console.log("[worker] ready – scheduler started, processors attached");
 }
 

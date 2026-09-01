@@ -127,7 +127,7 @@ function mapFixtureRow(fixture, pendingLegs = 0, editableOptions = {}) {
 }
 
 function buildListWhere({ q, status, filter, editableOnly, editableOptions }) {
-  const clauses = [];
+  const clauses = [{ provider: { not: "oddspapi" } }];
 
   if (editableOnly) {
     clauses.push(buildEditableFixtureWhere(editableOptions));
@@ -217,7 +217,12 @@ export async function getAdminFixturesSummary(req, res) {
   try {
     const editableOnly = parseBoolQuery(req.query.editableOnly, true);
     const editableOptions = parseEditableOptions(req);
-    const baseWhere = editableOnly ? buildEditableFixtureWhere(editableOptions) : {};
+    const baseWhere = {
+      AND: [
+        { provider: { not: "oddspapi" } },
+        editableOnly ? buildEditableFixtureWhere(editableOptions) : {},
+      ],
+    };
 
     const [total, stuck, live] = await Promise.all([
       prisma.fixture.count({ where: baseWhere }),
@@ -326,7 +331,7 @@ export async function listAdminFixtures(req, res) {
 export async function getAdminFixtureDetail(req, res) {
   try {
     const fixture = await loadFixtureDetail(req.params.id);
-    if (!fixture) {
+    if (!fixture || fixture.provider === "oddspapi") {
       return res.status(404).json({ message: "Fixture not found" });
     }
 
@@ -392,7 +397,7 @@ export async function patchAdminFixtureMarketResults(req, res) {
     } = req.body ?? {};
 
     const fixture = await loadFixtureDetail(fixtureId);
-    if (!fixture) {
+    if (!fixture || fixture.provider === "oddspapi") {
       return res.status(404).json({ message: "Fixture not found" });
     }
     const editableOptions = parseEditableOptions(req);

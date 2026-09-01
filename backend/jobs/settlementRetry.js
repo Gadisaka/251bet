@@ -97,6 +97,7 @@ async function retryTerminalFixtures(now, minStart) {
         { start_time: { gte: minStart } },
         { status: { in: TERMINAL_STATUSES } },
         unsetFilter("grading_completed_at"),
+        { provider: { not: "oddspapi" } },
       ],
     },
     select: {
@@ -218,6 +219,7 @@ async function settleExpiredPostponedFixtures(now) {
         { id: { in: ids } },
         { status: "PST" },
         unsetFilter("grading_completed_at"),
+        { provider: { not: "oddspapi" } },
       ],
     },
     select: {
@@ -291,6 +293,7 @@ async function rescueZombieFixtures(now, minStart) {
       id: { in: ids },
       status: { notIn: TERMINAL_STATUSES },
       start_time: { gte: minStart, lte: staleCutoff },
+      provider: { not: "oddspapi" },
     },
     include: { league: { include: { sport: true } } },
     take: ZOMBIE_BATCH,

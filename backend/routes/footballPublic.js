@@ -25,6 +25,7 @@ import {
   pickTopActiveLeagues,
 } from "../Config/leagueRanks.js";
 import { recomputeExtraMarketsCountForFixture } from "../services/extraMarketsCount.js";
+import { isOddspapiRow, notOddspapiWhere } from "../services/providers/publicScope.js";
 import {
   attachLeagueRanksToList,
   bookmakerCacheSuffix,
@@ -361,16 +362,18 @@ router.get("/sidebar-leagues", async (_req, res) => {
     const effectiveStart = upcomingCutoffStart(start);
 
     const [upcomingRows, liveRows] = await Promise.all([
-      prisma.fixture.findMany({
+        prisma.fixture.findMany({
         where: {
           status: { in: [...UPCOMING_ALLOWED_STATUSES] },
           start_time: { gte: effectiveStart, lte: end },
+          ...notOddspapiWhere(),
         },
         select: { league: { select: { api_league_id: true } } },
       }),
       prisma.fixture.findMany({
         where: {
           status: { in: LIVE_SIDEBAR_STATUSES },
+          ...notOddspapiWhere(),
         },
         select: { league: { select: { api_league_id: true } } },
       }),
@@ -451,7 +454,7 @@ router.get("/fixtures/today", async (_req, res) => {
         oddLineLimit: TODAY_ODD_LINES_PER_MARKET,
       };
       const rows = await prisma.fixture.findMany({
-        where: { start_time: { gte: start, lte: end } },
+        where: { start_time: { gte: start, lte: end }, ...notOddspapiWhere() },
         include: {
           home_team: true,
           away_team: true,
@@ -502,6 +505,7 @@ router.get("/fixtures/upcoming", async (req, res) => {
         where: {
           start_time: { gte: effectiveStart, lte: end },
           status: { in: [...UPCOMING_ALLOWED_STATUSES] },
+          ...notOddspapiWhere(),
         },
         include: {
           home_team: true,
@@ -569,6 +573,7 @@ router.get("/fixtures/live", async (_req, res) => {
       where: {
         status: { in: ["LIVE", "HT"] },
         api_fixture_id: { in: allowedApiIds },
+        ...notOddspapiWhere(),
       },
       take: LIVE_FIXTURES_LIMIT,
       include: {
@@ -632,7 +637,7 @@ router.get("/odds/:apiFixtureId", async (req, res) => {
           markets: buildMarketsInclude(preferred?.id),
         },
       });
-      if (!fixture) {
+      if (!fixture || isOddspapiRow(fixture)) {
         return res.status(404).json({ message: "Fixture not found" });
       }
 
@@ -786,14 +791,23 @@ router.get("/_debug/cache", async (_req, res) => {
   }
 });
 
-router.get("/_debug/upstream-usage", (_req, res) => {
+router.get("/_debug/upstream-usage", async (_req, res) => {
   if (process.env.NODE_ENV === "production") {
     return res.status(404).json({ message: "Not found" });
+  }
+  let oddspapi = null;
+  try {
+    const { quotaSnapshot } = await import("../services/providers/oddspapi/quota.js");
+    const { websocketStats } = await import("../jobs/oddspapi/websocket.js");
+    oddspapi = { quota: await quotaSnapshot(), ws: websocketStats() };
+  } catch (err) {
+    oddspapi = { error: err.message };
   }
   res.json({
     sport: "football",
     dailyCalls: getDailyCallCount("football"),
     dailyLimit: Number(process.env.API_SPORTS_DAILY_LIMIT || 75000),
+    oddspapi,
   });
 });
 

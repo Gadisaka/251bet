@@ -238,6 +238,11 @@ model League {
   logo            String?
   season          Int?
   active          Boolean @default(true)
+  // Dual-provider shadow: "apifootball" (default, unset on legacy rows) | "oddspapi".
+  provider                 String  @default("apifootball")
+  provider_tournament_id   Int?
+  category_slug            String?
+  category_name            String?
 
   sport    Sport     @relation(fields: [sport_id], references: [id], onDelete: Restrict)
   matches  Match[]
@@ -245,6 +250,7 @@ model League {
   fixtures Fixture[]
 
   @@index([sport_id])
+  @@index([provider, provider_tournament_id])
   @@map("leagues")
 }
 
@@ -254,18 +260,30 @@ model Team {
   name        String
   logo        String?
   league_id   String
+  provider                 String @default("apifootball")
+  provider_participant_id  Int?
 
   league        League    @relation(fields: [league_id], references: [id], onDelete: Restrict)
   home_fixtures Fixture[] @relation("FixtureHomeTeam")
   away_fixtures Fixture[] @relation("FixtureAwayTeam")
 
   @@index([league_id])
+  @@index([provider, provider_participant_id])
   @@map("teams")
 }
 
 model Fixture {
   id             String   @id @default(uuid()) @map("_id")
   api_fixture_id Int      @unique
+  // Dual-provider shadow. Legacy API-Football rows omit this field; public
+  // queries exclude provider="oddspapi". OddsPapi fixture ids are strings
+  // (`id1000…`); the numeric suffix is stored in api_fixture_id (16-digit,
+  // safe, no overlap with API-Football) so existing unique lookups keep working.
+  provider               String    @default("apifootball")
+  provider_fixture_id    String?
+  provider_tournament_id Int?
+  provider_season_id     Int?
+  external_ids           Json?
   start_time     DateTime
   status         String
   home_score     Int?
@@ -319,6 +337,8 @@ model Fixture {
 
   @@index([league_id])
   @@index([start_time])
+  @@index([provider, start_time, status])
+  @@index([provider_fixture_id])
   // Compound index used by `syncOdds` and the `/fixtures/upcoming` route,
   // both of which filter by `start_time` window AND `status` (e.g. NS,
   // LIVE, HT). With only single-field indexes on either column, those
@@ -343,6 +363,7 @@ model FixtureMarket {
   id         String @id @default(uuid()) @map("_id")
   name       String
   fixture_id String
+  provider_market_id Int?
 
   fixture   Fixture          @relation(fields: [fixture_id], references: [id], onDelete: Cascade)
   odd_lines FixtureOddLine[]
@@ -358,6 +379,11 @@ model FixtureOddLine {
   odd          Float
   market_id    String
   bookmaker_id String
+  provider_outcome_id Int?
+  provider_player_id  Int      @default(0)
+  active              Boolean  @default(true)
+  main_line           Boolean  @default(false)
+  max_limit           Float?
 
   market    FixtureMarket @relation(fields: [market_id], references: [id], onDelete: Cascade)
   bookmaker Bookmaker     @relation(fields: [bookmaker_id], references: [id], onDelete: Restrict)
