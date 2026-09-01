@@ -6,7 +6,10 @@ import {
   fetchOddsForFixture,
 } from "../services/api";
 import { applyOddsToMatch, mapFixtureToMatch } from "../services/fixtureMapper";
-import { mockPrematchMatches } from "../data/mockSportsbook";
+import {
+  mockLiveMatches,
+  mockPrematchMatches,
+} from "../data/mockSportsbook";
 import {
   getCalendarDayOffset,
   matchesClubNameSearch,
@@ -31,10 +34,33 @@ export {
 } from "../utils/matchTimeUtils";
 
 /**
- * Frontend-only showcase mode: every list is served from `mockSportsbook.js`
- * and no fixtures/odds requests are made. Set to false to restore live data.
+ * When true, lists come from `mockSportsbook.js` and no fixtures/odds
+ * requests are made. Keep false so Home/Live use the live API.
  */
-export const USE_MOCK_DATA = true;
+export const USE_MOCK_DATA = false;
+
+function livePeriodFromStatus(status) {
+  const s = String(status || "").toUpperCase();
+  if (s === "HT" || s.includes("HALF TIME") || s.includes("HALFTIME")) {
+    return "Half Time";
+  }
+  if (s === "1H") return "1st Half";
+  if (s === "2H") return "2nd Half";
+  if (s.includes("PENALT")) return "Penalties";
+  if (s.includes("ET") || s.includes("EXTRA")) return "Extra Time";
+  return s || "Live";
+}
+
+function mapLiveFixtureToMatch(fixture) {
+  const base = mapFixtureToMatch(fixture);
+  const elapsed = fixture?.elapsed ?? fixture?._liveElapsed ?? null;
+  const minute = Number(elapsed);
+  return {
+    ...base,
+    livePeriod: livePeriodFromStatus(fixture?.status),
+    liveMinute: Number.isFinite(minute) ? minute : null,
+  };
+}
 
 const USE_FIXTURES_BY_DATE =
   import.meta.env.VITE_USE_FIXTURES_BY_DATE !== "false";
@@ -540,6 +566,11 @@ export function useMatches({ includeLive = true, filters = {} } = {}) {
     [matches, oddsDetailByFixtureId],
   );
 
+  const liveMatches = useMemo(() => {
+    if (USE_MOCK_DATA) return mockLiveMatches;
+    return liveFixtures.map((fx) => mapLiveFixtureToMatch(fx));
+  }, [liveFixtures]);
+
   const { resolvedTimeId, dateDropdownOptions } = useMemo(() => {
     const selSport = String(filters.sportId || "").toLowerCase();
     const base = hydratedMatches.filter((match) => {
@@ -636,6 +667,7 @@ export function useMatches({ includeLive = true, filters = {} } = {}) {
   return {
     allMatches: hydratedMatches,
     matches: filteredMatches,
+    liveMatches,
     resolvedTimeId,
     dateDropdownOptions,
     loading,

@@ -20,10 +20,6 @@ import {
   topHeaderData,
   topNavItems,
 } from "../data/homepageData";
-import {
-  mockLiveMatches,
-  mockMultipleOfTheDay,
-} from "../data/mockSportsbook";
 import useMatches, { PREMATCH_HORIZON_DAYS } from "../hooks/useMatches";
 import { useFootballSidebarCatalog } from "../hooks/useFootballSidebarCatalog";
 import {
@@ -88,6 +84,7 @@ function Home() {
   const {
     matches,
     allMatches,
+    liveMatches,
     loading,
     error,
     refreshAll,
@@ -504,8 +501,8 @@ function Home() {
               <HeroBanner />
               <HomeDiscoverSections
                 popularMatches={popularMatches}
-                liveMatches={mockLiveMatches}
-                multiples={mockMultipleOfTheDay}
+                liveMatches={liveMatches}
+                multiples={[]}
                 onMoreLive={() => navigate("/live")}
                 onOddsClick={handleOddsClick}
                 selectedOdds={selectedOdds}
@@ -596,7 +593,7 @@ function Home() {
         onReplaceSelections={handleReplaceSlipSelections}
         onSelectionClick={handleOpenSelectionOnHome}
         leaguesSidebarProps={topLeaguesSidebarProps}
-        liveCount={mockLiveMatches.length}
+        liveCount={liveMatches.length}
       />
     </PageContainer>
   );
