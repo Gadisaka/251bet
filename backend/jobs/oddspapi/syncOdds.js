@@ -38,8 +38,14 @@ async function dropProviderShapedMarkets(fixtureId) {
   return staleIds.length;
 }
 
-async function persistLines(fixtureRow, lines, bookmaker, marketMap) {
-  await dropProviderShapedMarkets(fixtureRow.id);
+async function persistLines(
+  fixtureRow,
+  lines,
+  bookmaker,
+  marketMap,
+  { pruneMissing = true } = {},
+) {
+  if (pruneMissing) await dropProviderShapedMarkets(fixtureRow.id);
 
   const byName = new Map();
   for (const line of lines) {
@@ -91,16 +97,41 @@ async function persistLines(fixtureRow, lines, bookmaker, marketMap) {
         },
       });
     }
-    const values = [...new Set(group.map(({ legacy }) => legacy.value))];
-    await prisma.fixtureOddLine.deleteMany({
-      where: {
-        market_id: market.id,
-        bookmaker_id: bookmaker.id,
-        value: { notIn: values },
-      },
-    });
+    if (pruneMissing) {
+      const values = [...new Set(group.map(({ legacy }) => legacy.value))];
+      await prisma.fixtureOddLine.deleteMany({
+        where: {
+          market_id: market.id,
+          bookmaker_id: bookmaker.id,
+          value: { notIn: values },
+        },
+      });
+    }
   }
   await recomputeExtraMarketsCountForFixture(fixtureRow.id).catch(() => {});
+}
+
+const persistBookmakerCache = { at: 0, row: null };
+
+async function cachedBookmaker(slug) {
+  if (persistBookmakerCache.row && Date.now() - persistBookmakerCache.at < 60_000) {
+    return persistBookmakerCache.row;
+  }
+  const row = await resolveBookmaker(slug);
+  persistBookmakerCache.at = Date.now();
+  persistBookmakerCache.row = row;
+  return row;
+}
+
+/** Upsert a (possibly partial) OddsPapi odds blob onto an existing fixture. */
+export async function persistOddspapiRawOdds(fixtureRow, raw, { pruneMissing = true } = {}) {
+  const cfg = getOddspapiConfig();
+  const bookmaker = await cachedBookmaker(cfg.bookmaker);
+  const marketMap = await loadMarketMap();
+  const flat = flattenOdds(raw, cfg.bookmaker);
+  if (!flat.lines.length) return { lines: 0 };
+  await persistLines(fixtureRow, flat.lines, bookmaker, marketMap, { pruneMissing });
+  return { lines: flat.lines.length };
 }
 
 function hoursFromNow(h) {
@@ -129,8 +160,25 @@ async function tournamentIdsForTier(tier) {
     },
     select: { provider_tournament_id: true },
   });
-  const ids = [...new Set(rows.map((r) => r.provider_tournament_id).filter(Boolean))];
-  return ids;
+  const ids = new Set(rows.map((r) => r.provider_tournament_id).filter(Boolean));
+
+  // Kickoff is already in the past for in-play games, so the window above
+  // never sees them. Hot ingest must still reseed their prices — the
+  // WebSocket is deltas-only and cannot rebuild a book after reconnect.
+  if (tier === "hot") {
+    const liveRows = await prisma.fixture.findMany({
+      where: {
+        provider: PROVIDER,
+        status: { in: ["LIVE", "HT"] },
+        provider_tournament_id: { not: null },
+      },
+      select: { provider_tournament_id: true },
+    });
+    for (const r of liveRows) {
+      if (r.provider_tournament_id) ids.add(r.provider_tournament_id);
+    }
+  }
+  return [...ids];
 }
 
 export async function runOddspapiOdds({ tier = "hot" } = {}) {

@@ -243,3 +243,21 @@ export function legacyMarket(marketId, outcomeId, catalogue) {
   if (!name || !value) return null;
   return { ...bridged, name, value };
 }
+
+/**
+ * Group flattened OddsPapi lines into the public `{ name, odd_lines }` shape.
+ */
+export function legacyMarketsFromLines(lines, marketMap = {}) {
+  const byName = new Map();
+  for (const line of lines || []) {
+    const legacy = legacyMarket(
+      line.marketId,
+      line.outcomeId,
+      marketMap[String(line.marketId)],
+    );
+    if (!legacy) continue;
+    if (!byName.has(legacy.name)) byName.set(legacy.name, []);
+    byName.get(legacy.name).push({ value: legacy.value, odd: line.price });
+  }
+  return [...byName.entries()].map(([name, odd_lines]) => ({ name, odd_lines }));
+}

@@ -17,6 +17,7 @@ import {
 import { asList } from "../../services/providers/oddspapi/client.js";
 import { allowOddsTier } from "../../services/providers/oddspapi/quota.js";
 import { andNotOddspapi, PROVIDER_ODDSPAPI } from "../../services/providers/publicScope.js";
+import { mergeBookmakerOdds } from "../../services/providers/oddspapi/mergeBookmakerOdds.js";
 
 test("parseProviderFixtureId extracts a safe integer", () => {
   assert.equal(parseProviderFixtureId("id1000001761301153"), 1000001761301153);
@@ -134,4 +135,53 @@ test("quota freeze blocks all odds tiers; critical drops cold/warm", () => {
 test("public queries exclude oddspapi by default", () => {
   const where = andNotOddspapi({ status: "NS" });
   assert.equal(where.AND[1].provider.not, PROVIDER_ODDSPAPI);
+});
+
+test("mergeBookmakerOdds keeps earlier prices when a later patch has no markets", () => {
+  const seeded = {
+    "1xbet": {
+      markets: {
+        101: {
+          outcomes: {
+            101: { players: { 0: { price: 1.9 } } },
+          },
+        },
+      },
+    },
+  };
+  const infoOnly = {
+    "1xbet": { fixturePath: "https://example/match" },
+  };
+  const merged = mergeBookmakerOdds(seeded, infoOnly);
+  assert.equal(merged["1xbet"].fixturePath, "https://example/match");
+  assert.equal(merged["1xbet"].markets[101].outcomes[101].players[0].price, 1.9);
+});
+
+test("mergeBookmakerOdds deep-merges a single outcome delta", () => {
+  const prev = {
+    "1xbet": {
+      markets: {
+        101: {
+          outcomes: {
+            101: { players: { 0: { price: 1.9, active: true } } },
+            102: { players: { 0: { price: 3.4, active: true } } },
+          },
+        },
+      },
+    },
+  };
+  const patch = {
+    "1xbet": {
+      markets: {
+        101: {
+          outcomes: {
+            101: { players: { 0: { price: 2.05 } } },
+          },
+        },
+      },
+    },
+  };
+  const merged = mergeBookmakerOdds(prev, patch);
+  assert.equal(merged["1xbet"].markets[101].outcomes[101].players[0].price, 2.05);
+  assert.equal(merged["1xbet"].markets[101].outcomes[102].players[0].price, 3.4);
 });

@@ -27,6 +27,7 @@ import {
 import { recomputeExtraMarketsCountForFixture } from "../services/extraMarketsCount.js";
 import { isOddspapiRow, notOddspapiWhere, PROVIDER_ODDSPAPI } from "../services/providers/publicScope.js";
 import { isOddspapiPublic } from "../services/providers/activeProvider.js";
+import { buildOddspapiLiveOdds } from "../services/providers/oddspapi/liveOddsView.js";
 import {
   attachLeagueRanksToList,
   bookmakerCacheSuffix,
@@ -622,7 +623,6 @@ router.get("/fixtures/live", async (_req, res) => {
 router.get("/odds/live", async (_req, res) => {
   try {
     if (isOddspapiPublic()) {
-      const preferred = await getPreferredBookmakerRecord();
       const rows = await prisma.fixture.findMany({
         where: {
           status: { in: ["LIVE", "HT"] },
@@ -630,27 +630,11 @@ router.get("/odds/live", async (_req, res) => {
         },
         take: LIVE_FIXTURES_LIMIT,
         include: {
-          markets: buildMarketsInclude(preferred?.id),
+          markets: buildMarketsInclude(null),
         },
         orderBy: { start_time: "asc" },
       });
-      const payload = rows.map((fx) => {
-        const gated = dropUnsupportedMarkets(fx);
-        return {
-          api_fixture_id: fx.api_fixture_id,
-          status: fx.status,
-          elapsed: null,
-          home_score: fx.home_score,
-          away_score: fx.away_score,
-          markets: (gated.markets || []).map((m) => ({
-            name: m.name,
-            odd_lines: (m.odd_lines || []).map((ol) => ({
-              value: ol.value,
-              odd: ol.odd,
-            })),
-          })),
-        };
-      });
+      const payload = await buildOddspapiLiveOdds(rows, dropUnsupportedMarkets);
       return res.json(payload);
     }
     const liveOdds = await getTransformedLiveOddsCoalesced();

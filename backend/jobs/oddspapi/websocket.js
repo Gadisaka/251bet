@@ -4,18 +4,22 @@ import {
   getOddspapiConfig,
   isOddspapiShadowEnabled,
   mapStatusId,
+  oddspapiWsCacheKey,
   parseProviderFixtureId,
 } from "../../services/providers/oddspapi/config.js";
+import { mergeBookmakerOdds } from "../../services/providers/oddspapi/mergeBookmakerOdds.js";
 import { normalizeScores } from "../../services/providers/oddspapi/normalize.js";
 import prisma from "../../Config/db.js";
+import { persistOddspapiRawOdds } from "./syncOdds.js";
 
-const LIVE_KEY = (id) => `oddspapi:ws:${id}`;
 const LIVE_TTL = 6 * 3600;
+const PERSIST_MIN_MS = 8_000;
 
 let socket = null;
 let stopRequested = false;
 let reconnectTimer = null;
 let stats = { messages: 0, openedAt: null, lastMessageAt: null, reconnects: 0 };
+const lastPersistAt = new Map();
 
 function mergeScore(msg) {
   const { fullTime, halfTime } = normalizeScores(msg);
@@ -31,29 +35,57 @@ function mergeScore(msg) {
   return Object.keys(patch).length ? patch : null;
 }
 
+async function persistLiveOdds(existing, mergedOdds) {
+  const now = Date.now();
+  const prev = lastPersistAt.get(existing.id) || 0;
+  if (now - prev < PERSIST_MIN_MS) return;
+  lastPersistAt.set(existing.id, now);
+  await persistOddspapiRawOdds(
+    existing,
+    { bookmakerOdds: mergedOdds },
+    { pruneMissing: false },
+  );
+}
+
 async function applyMessage(msg) {
   if (!msg?.fixtureId) return;
   const apiId = parseProviderFixtureId(msg.fixtureId);
-  const prev = (await getCache(LIVE_KEY(msg.fixtureId))) || {};
-  const next = { ...prev, fixtureId: msg.fixtureId, updatedAt: msg.updatedAt || new Date().toISOString() };
+  const cacheKey = oddspapiWsCacheKey(msg.fixtureId);
+  const prev = (await getCache(cacheKey)) || {};
+  const next = {
+    ...prev,
+    fixtureId: msg.fixtureId,
+    updatedAt: msg.updatedAt || new Date().toISOString(),
+  };
   if (msg.statusId != null) next.statusId = msg.statusId;
-  if (msg.bookmakerOdds) next.bookmakerOdds = msg.bookmakerOdds;
   if (msg.scores) next.scores = msg.scores;
-  await setCache(LIVE_KEY(msg.fixtureId), next, LIVE_TTL);
+  if (msg.bookmakerOdds) {
+    next.bookmakerOdds = mergeBookmakerOdds(prev.bookmakerOdds, msg.bookmakerOdds);
+  }
+  await setCache(cacheKey, next, LIVE_TTL);
 
   if (apiId == null) return;
   const patch = {};
   if (msg.statusId != null) patch.status = mapStatusId(msg.statusId);
   const score = mergeScore(msg);
   if (score) Object.assign(patch, score);
-  if (!Object.keys(patch).length) return;
 
   const existing = await prisma.fixture.findUnique({
     where: { api_fixture_id: apiId },
     select: { id: true, provider: true },
   });
   if (!existing || existing.provider !== "oddspapi") return;
-  await prisma.fixture.update({ where: { id: existing.id }, data: patch });
+
+  if (Object.keys(patch).length) {
+    await prisma.fixture.update({ where: { id: existing.id }, data: patch });
+  }
+
+  if (msg.bookmakerOdds) {
+    persistLiveOdds(existing, next.bookmakerOdds).catch((err) => {
+      console.warn("[oddspapi:ws] odds persist failed:", err.message);
+    });
+  }
+
   const nextStatus = patch.status;
   if (nextStatus === "FT" || nextStatus === "AET" || nextStatus === "CANC") {
     import("../../services/ticketSettlementService.js")

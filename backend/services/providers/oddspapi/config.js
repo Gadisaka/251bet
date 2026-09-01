@@ -1,5 +1,9 @@
 export const PROVIDER = "oddspapi";
 
+export function oddspapiWsCacheKey(providerFixtureId) {
+  return `oddspapi:ws:${providerFixtureId}`;
+}
+
 export function getOddspapiConfig() {
   return {
     apiKey: process.env.ODDSPAPI_API_KEY || "",
