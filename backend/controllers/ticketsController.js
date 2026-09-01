@@ -1771,6 +1771,8 @@ export async function createPrebookTicket(req, res) {
         marketState: row?.marketState || "OPEN",
         serverUpdatedAt: row?.serverUpdatedAt || null,
         serverLive: Boolean(row?.serverLive),
+        providerMarketId: row?.providerMarketId ?? null,
+        providerOutcomeId: row?.providerOutcomeId ?? null,
       };
     });
     const totalOdds = Number(validated.totalOdds || 0);
@@ -1820,6 +1822,12 @@ export async function createPrebookTicket(req, res) {
         ? Number(item.serverMarketVersion)
         : null,
       live_at_placement: Boolean(item.serverLive),
+      provider_market_id: Number.isFinite(Number(item.providerMarketId))
+        ? Number(item.providerMarketId)
+        : null,
+      provider_outcome_id: Number.isFinite(Number(item.providerOutcomeId))
+        ? Number(item.providerOutcomeId)
+        : null,
       result: "PENDING",
     }));
 
@@ -3709,6 +3717,8 @@ function cloneSelectionRowsForRepeat(selections = []) {
     result: "PENDING",
     market_version: sel.market_version,
     server_market_version: sel.server_market_version,
+    provider_market_id: sel.provider_market_id ?? null,
+    provider_outcome_id: sel.provider_outcome_id ?? null,
   }));
 }
 
@@ -3927,6 +3937,8 @@ export async function addTicketSelection(req, res) {
       ),
       marketState: resolved?.marketState || "OPEN",
       serverUpdatedAt: resolved?.serverUpdatedAt || null,
+      providerMarketId: resolved?.providerMarketId ?? null,
+      providerOutcomeId: resolved?.providerOutcomeId ?? null,
     };
 
     const snapshot = Array.isArray(ticket.selection_snapshot)
@@ -3994,6 +4006,12 @@ export async function addTicketSelection(req, res) {
         ? Number(lockedSelection.serverMarketVersion)
         : null,
       live_at_placement: Boolean(lockedSelection.fromLive),
+      provider_market_id: Number.isFinite(Number(lockedSelection.providerMarketId))
+        ? Number(lockedSelection.providerMarketId)
+        : null,
+      provider_outcome_id: Number.isFinite(Number(lockedSelection.providerOutcomeId))
+        ? Number(lockedSelection.providerOutcomeId)
+        : null,
       result: "PENDING",
     };
 

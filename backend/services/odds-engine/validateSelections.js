@@ -64,15 +64,15 @@ export async function validatePlacementSelections({
   );
 
   for (const row of resolved) {
-    if (row.code === "unknown_fixture" || row.code === "oddspapi_not_offerable") {
+    if (row.code === "unknown_fixture") {
       recordValidationMetric({
         channel: live ? "live" : "prematch",
-        code: row.code,
+        code: "unknown_fixture",
         latencyMs: Date.now() - startedAt,
       });
       return {
         ok: false,
-        code: row.code,
+        code: "unknown_fixture",
         selections: [{ index: row.index }],
       };
     }

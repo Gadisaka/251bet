@@ -127,7 +127,7 @@ function mapFixtureRow(fixture, pendingLegs = 0, editableOptions = {}) {
 }
 
 function buildListWhere({ q, status, filter, editableOnly, editableOptions }) {
-  const clauses = [{ provider: { not: "oddspapi" } }];
+  const clauses = [];
 
   if (editableOnly) {
     clauses.push(buildEditableFixtureWhere(editableOptions));
@@ -219,7 +219,6 @@ export async function getAdminFixturesSummary(req, res) {
     const editableOptions = parseEditableOptions(req);
     const baseWhere = {
       AND: [
-        { provider: { not: "oddspapi" } },
         editableOnly ? buildEditableFixtureWhere(editableOptions) : {},
       ],
     };
@@ -331,7 +330,7 @@ export async function listAdminFixtures(req, res) {
 export async function getAdminFixtureDetail(req, res) {
   try {
     const fixture = await loadFixtureDetail(req.params.id);
-    if (!fixture || fixture.provider === "oddspapi") {
+    if (!fixture) {
       return res.status(404).json({ message: "Fixture not found" });
     }
 
@@ -397,7 +396,7 @@ export async function patchAdminFixtureMarketResults(req, res) {
     } = req.body ?? {};
 
     const fixture = await loadFixtureDetail(fixtureId);
-    if (!fixture || fixture.provider === "oddspapi") {
+    if (!fixture) {
       return res.status(404).json({ message: "Fixture not found" });
     }
     const editableOptions = parseEditableOptions(req);

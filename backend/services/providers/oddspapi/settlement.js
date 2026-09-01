@@ -105,3 +105,41 @@ export function isFullyUndecided(counts) {
   if (total === 0) return true;
   return (counts.UNDECIDED || 0) === total;
 }
+
+/**
+ * Resolve a ticket leg against a flattened settlements map.
+ * Half-stake verdicts stay PENDING: TicketSelection cannot store a factor.
+ */
+export function lookupTicketResult(byKey, marketId, outcomeId, playerId = 0) {
+  if (marketId == null || outcomeId == null || !byKey) {
+    return {
+      result: "PENDING",
+      reason: "missing_provider_ids",
+      factor: 0,
+    };
+  }
+  const entry = byKey.get(outcomeKey(marketId, outcomeId, playerId));
+  if (!entry) {
+    return {
+      result: "PENDING",
+      reason: "settlement_undecided",
+      factor: 0,
+    };
+  }
+  if (entry.factor === 0.5) {
+    return {
+      result: "PENDING",
+      reason: "half_stake_unsupported",
+      factor: 0.5,
+      providerResult: entry.providerResult,
+    };
+  }
+  return {
+    result: entry.result,
+    reason: `oddspapi:${entry.providerResult}`,
+    factor: entry.factor,
+    providerResult: entry.providerResult,
+    engineVersion: 0,
+    marketVersion: 0,
+  };
+}

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   isFullyUndecided,
+  lookupTicketResult,
   normalizeSettlements,
   outcomeKey,
   toTicketResult,
@@ -156,6 +157,16 @@ test("isFullyUndecided detects an ungraded fixture", () => {
   assert.equal(isFullyUndecided({}), true);
 });
 
+test("lookupTicketResult maps a settled outcome and refuses half-stake", () => {
+  const { byKey } = normalizeSettlements(SETTLEMENTS);
+  assert.equal(lookupTicketResult(byKey, 101, 102).result, "WON");
+  assert.equal(lookupTicketResult(byKey, 101, 101).result, "LOST");
+  assert.equal(lookupTicketResult(byKey, 1070, 1070).result, "PENDING");
+  assert.equal(lookupTicketResult(byKey, 1070, 1070).reason, "half_stake_unsupported");
+  assert.equal(lookupTicketResult(byKey, 999, 999).result, "PENDING");
+  assert.equal(lookupTicketResult(byKey, null, 101).reason, "missing_provider_ids");
+});
+
 test("bridge maps the core score-derived markets", () => {
   assert.deepEqual(bridgeSelection(101, 102, CATALOGUE[101]), {
     market_code: "MATCH_WINNER",
@@ -283,10 +294,12 @@ test("legacyMarket names match the public list allowlist byte-for-byte", () => {
   }
 });
 
-test("legacyMarket refuses markets outside the today allowlist", () => {
-  assert.equal(legacyMarket(10214, 10214, CATALOGUE[10214]), null);
-  assert.equal(legacyMarket(1070, 1070, CATALOGUE[1070]), null);
-  assert.equal(legacyMarket(10730, 10730, CATALOGUE[10730]), null);
+test("legacyMarket refuses quarter-line totals that settle half-stake", () => {
+  const cat = {
+    ...CATALOGUE[106],
+    handicap: 0.75,
+  };
+  assert.equal(legacyMarket(106, 106, cat), null);
 });
 
 test("normalizeScores reads NAMED periods, not positional ones", () => {

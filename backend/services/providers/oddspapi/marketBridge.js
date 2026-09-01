@@ -233,6 +233,11 @@ function legacyValue(bridged) {
 export function legacyMarket(marketId, outcomeId, catalogue) {
   const bridged = bridgeSelection(marketId, outcomeId, catalogue);
   if (!bridged || !CUTOVER_CODE_SET.has(bridged.market_code)) return null;
+  if (bridged.market_code === "OVER_UNDER") {
+    const line = Number(bridged.params?.line);
+    // .25 / .75 totals settle HALFWIN/HALFLOSS; TicketSelection has no factor.
+    if (!Number.isFinite(line) || !Number.isInteger(line * 2)) return null;
+  }
   const name = LEGACY_MARKET_NAMES[bridged.market_code];
   const value = legacyValue(bridged);
   if (!name || !value) return null;

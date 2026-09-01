@@ -24,17 +24,20 @@ async function main() {
   console.log(`oddspapi fixtures: ${fixtureIds.length}`);
 
   let deleted = 0;
-  const BATCH = 200;
-  for (let i = 0; i < fixtureIds.length; i += BATCH) {
-    const slice = fixtureIds.slice(i, i + BATCH);
+  const FIXTURE_BATCH = 50;
+  const DELETE_BATCH = 20;
+  for (let i = 0; i < fixtureIds.length; i += FIXTURE_BATCH) {
+    const slice = fixtureIds.slice(i, i + FIXTURE_BATCH);
     const markets = await prisma.fixtureMarket.findMany({
       where: { fixture_id: { in: slice } },
       select: { id: true, name: true },
     });
     const staleIds = markets.filter((m) => STALE_NAME.test(m.name)).map((m) => m.id);
-    if (!staleIds.length) continue;
-    await prisma.fixtureMarket.deleteMany({ where: { id: { in: staleIds } } });
-    deleted += staleIds.length;
+    for (let j = 0; j < staleIds.length; j += DELETE_BATCH) {
+      const ids = staleIds.slice(j, j + DELETE_BATCH);
+      await prisma.fixtureMarket.deleteMany({ where: { id: { in: ids } } });
+      deleted += ids.length;
+    }
   }
   console.log(`deleted provider-shaped markets: ${deleted}`);
 

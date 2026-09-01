@@ -54,6 +54,14 @@ async function applyMessage(msg) {
   });
   if (!existing || existing.provider !== "oddspapi") return;
   await prisma.fixture.update({ where: { id: existing.id }, data: patch });
+  const nextStatus = patch.status;
+  if (nextStatus === "FT" || nextStatus === "AET" || nextStatus === "CANC") {
+    import("../../services/ticketSettlementService.js")
+      .then(({ settleFixture }) => settleFixture(existing.id))
+      .catch((err) => {
+        console.warn("[oddspapi:ws] settle failed:", err.message);
+      });
+  }
 }
 
 function openSocket() {

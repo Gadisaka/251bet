@@ -97,7 +97,6 @@ async function retryTerminalFixtures(now, minStart) {
         { start_time: { gte: minStart } },
         { status: { in: TERMINAL_STATUSES } },
         unsetFilter("grading_completed_at"),
-        { provider: { not: "oddspapi" } },
       ],
     },
     select: {
@@ -106,6 +105,7 @@ async function retryTerminalFixtures(now, minStart) {
       status: true,
       start_time: true,
       postponed_at: true,
+      provider: true,
     },
     take: DEFAULT_BATCH,
     orderBy: { start_time: "asc" },
@@ -133,7 +133,9 @@ async function retryTerminalFixtures(now, minStart) {
       // was missing events/stats, this unblocks the next settleFixture
       // call. Enrichment is a no-op when the env flag is off or the
       // fixture is already enriched.
-      await enrichFixtureResult(fx.id).catch(() => {});
+      if (fx.provider !== "oddspapi") {
+        await enrichFixtureResult(fx.id).catch(() => {});
+      }
       const result = await settleFixture(fx.id, { force: true });
       retried++;
       if (result?.gradingCompleted) {
@@ -219,7 +221,6 @@ async function settleExpiredPostponedFixtures(now) {
         { id: { in: ids } },
         { status: "PST" },
         unsetFilter("grading_completed_at"),
-        { provider: { not: "oddspapi" } },
       ],
     },
     select: {
@@ -293,7 +294,6 @@ async function rescueZombieFixtures(now, minStart) {
       id: { in: ids },
       status: { notIn: TERMINAL_STATUSES },
       start_time: { gte: minStart, lte: staleCutoff },
-      provider: { not: "oddspapi" },
     },
     include: { league: { include: { sport: true } } },
     take: ZOMBIE_BATCH,
@@ -308,6 +308,12 @@ async function rescueZombieFixtures(now, minStart) {
     try {
       // Admin has pinned this result — never overwrite from upstream.
       if (isFixtureResultLocked(fx)) continue;
+
+      if (fx.provider === "oddspapi") {
+        const result = await settleFixture(fx.id, { force: true });
+        if (result && !result.skipped) settled++;
+        continue;
+      }
 
       const sportSlug = fx.league?.sport?.slug || "football";
       const rows = await api(sportSlug).getFixtureById(fx.api_fixture_id);

@@ -52,6 +52,13 @@ import {
 } from "./matchResult/v2.js";
 import { ticketWinningsTaxBreakdown } from "../lib/winningsTax.js";
 import { creditCashbackOnLostTicketInTx } from "../lib/bonusEngine.js";
+import { PROVIDER_ODDSPAPI } from "./providers/publicScope.js";
+import { getScores, getSettlements } from "./providers/oddspapi/endpoints.js";
+import { normalizeScores } from "./providers/oddspapi/normalize.js";
+import {
+  lookupTicketResult,
+  normalizeSettlements,
+} from "./providers/oddspapi/settlement.js";
 import {
   capGrossPotentialWin,
   resolveBettingLimits,
@@ -469,6 +476,13 @@ async function gradeSelectionsInTx(tx, selections, matchResults, marketResultOve
     if (overrideOutcome) {
       v1Outcome = overrideOutcome;
       v2Outcome = overrideOutcome;
+    } else if (context.oddspapiByKey) {
+      v1Outcome = lookupTicketResult(
+        context.oddspapiByKey,
+        sel.provider_market_id,
+        sel.provider_outcome_id,
+      );
+      v2Outcome = evaluateSelectionV2(sel, matchResults.v2);
     } else {
       if (!useV2Engine() || useShadow()) {
         v1Outcome = evaluateSelectionV1(sel, matchResults.v1);
@@ -478,7 +492,26 @@ async function gradeSelectionsInTx(tx, selections, matchResults, marketResultOve
       }
     }
 
-    const merged = mergeLegResult(sel, v1Outcome, v2Outcome);
+    const merged =
+      context.oddspapiByKey && !overrideOutcome
+        ? {
+            result: v1Outcome?.result || SELECTION_RESULT.PENDING,
+            reason: v1Outcome?.reason || null,
+            meta: {
+              engine: "oddspapi",
+              reason: v1Outcome?.reason || null,
+              engineVersion: v1Outcome?.engineVersion ?? 0,
+              marketVersion: v1Outcome?.marketVersion ?? 0,
+              shadow: v2Outcome
+                ? {
+                    engine: "v2",
+                    result: v2Outcome.result,
+                    reason: v2Outcome.reason || null,
+                  }
+                : null,
+            },
+          }
+        : mergeLegResult(sel, v1Outcome, v2Outcome);
 
     // FAIL-CLOSED on absent provider data: a leg that VOIDs for
     // `missing_required_data` (stats/events not present) on a fixture that was
@@ -508,7 +541,12 @@ async function gradeSelectionsInTx(tx, selections, matchResults, marketResultOve
     }
 
     // Shadow mismatch detection (never mutates ticket outcomes).
-    if (useShadow() && v1Outcome && v2Outcome && v1Outcome.result !== v2Outcome.result) {
+    if (
+      ((useShadow() && !context.oddspapiByKey) || context.oddspapiByKey) &&
+      v1Outcome &&
+      v2Outcome &&
+      v1Outcome.result !== v2Outcome.result
+    ) {
       await recordShadowMismatch({
         selectionId: sel.id,
         ticketId: sel.ticket_id,
@@ -641,6 +679,44 @@ async function recomputeAndCreditTickets(tx, ticketIds) {
   };
 }
 
+async function ensureOddspapiScores(fixture) {
+  if (
+    Number.isInteger(fixture.home_score) &&
+    Number.isInteger(fixture.away_score)
+  ) {
+    return fixture;
+  }
+  if (!fixture.provider_fixture_id) return fixture;
+  const res = await getScores(fixture.provider_fixture_id).catch((err) => {
+    if (err?.status === 404) return null;
+    throw err;
+  });
+  if (!res) return fixture;
+  const { fullTime, halfTime } = normalizeScores(res.json);
+  const patch = {};
+  if (fullTime) {
+    patch.home_score = fullTime.home;
+    patch.away_score = fullTime.away;
+  }
+  if (halfTime) {
+    patch.ht_home_score = halfTime.home;
+    patch.ht_away_score = halfTime.away;
+  }
+  if (!Object.keys(patch).length) return fixture;
+  await prisma.fixture.update({ where: { id: fixture.id }, data: patch });
+  return { ...fixture, ...patch };
+}
+
+async function loadOddspapiSettlements(fixture) {
+  if (!fixture.provider_fixture_id) return new Map();
+  const res = await getSettlements(fixture.provider_fixture_id).catch((err) => {
+    if (err?.status === 404) return null;
+    throw err;
+  });
+  if (!res) return new Map();
+  return normalizeSettlements(res.json).byKey;
+}
+
 /**
  * Settle every selection on a fixture. Idempotent through
  * `Fixture.grading_completed_at`. `settled_at` is written on every
@@ -660,6 +736,17 @@ export async function settleFixture(fixtureId, options = {}) {
     `[settlement] start fixture=${fixtureId} force=${!!options.force}`,
   );
   try {
+    const peek = await prisma.fixture.findUnique({ where: { id: fixtureId } });
+    let oddspapiByKey = null;
+    if (
+      peek?.provider === PROVIDER_ODDSPAPI &&
+      isTerminalFixtureStatus(peek.status) &&
+      (!peek.grading_completed_at || options.force)
+    ) {
+      const scored = await ensureOddspapiScores(peek);
+      oddspapiByKey = await loadOddspapiSettlements(scored);
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       const fixture = await tx.fixture.findUnique({
         where: { id: fixtureId },
@@ -717,7 +804,12 @@ export async function settleFixture(fixtureId, options = {}) {
         selections,
         matchResults,
         fixture.market_result_overrides,
-        { kind: "FIXTURE", id: fixtureId },
+        {
+          kind: "FIXTURE",
+          id: fixtureId,
+          oddspapiByKey:
+            fixture.provider === PROVIDER_ODDSPAPI ? oddspapiByKey : null,
+        },
       );
       const {
         ticketsWon,

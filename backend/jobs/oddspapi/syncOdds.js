@@ -91,6 +91,14 @@ async function persistLines(fixtureRow, lines, bookmaker, marketMap) {
         },
       });
     }
+    const values = [...new Set(group.map(({ legacy }) => legacy.value))];
+    await prisma.fixtureOddLine.deleteMany({
+      where: {
+        market_id: market.id,
+        bookmaker_id: bookmaker.id,
+        value: { notIn: values },
+      },
+    });
   }
   await recomputeExtraMarketsCountForFixture(fixtureRow.id).catch(() => {});
 }

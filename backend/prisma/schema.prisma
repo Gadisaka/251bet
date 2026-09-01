@@ -509,6 +509,8 @@ model TicketSelection {
   result_meta    Json?
   market_version Int?
   server_market_version Int?
+  provider_market_id    Int?
+  provider_outcome_id   Int?
 
   ticket  Ticket   @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
   match   Match?   @relation(fields: [match_id], references: [id], onDelete: Restrict)
