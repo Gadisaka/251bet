@@ -18,8 +18,8 @@ import {
 const DEFAULT_BATCH = 40;
 const DEFAULT_SCAN = 400;
 const DEFAULT_RETRY_HOURS = 24;
-/** Live + upcoming only. A 6h lookback kept the job stuck on morning leftovers. */
-const LOOKBACK_HOURS = 2;
+/** Keep in-play rows; do not scan this morning's leftovers. */
+const LOOKBACK_HOURS = 0.5;
 const DEFAULT_TSDB_CAP = 25;
 
 export function isSofascoreLogosEnabled(env = process.env) {
@@ -145,7 +145,10 @@ export async function runOddspapiSyncLogos({
   const rows = await prisma.fixture.findMany({
     where: {
       provider: PROVIDER,
-      start_time: { gte: from, lte: to },
+      OR: [
+        { status: { in: ["LIVE", "HT"] } },
+        { start_time: { gte: from, lte: to } },
+      ],
     },
     select: {
       id: true,
