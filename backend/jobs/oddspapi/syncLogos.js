@@ -18,8 +18,8 @@ import {
 const DEFAULT_BATCH = 40;
 const DEFAULT_SCAN = 400;
 const DEFAULT_RETRY_HOURS = 24;
-/** Keep in-play rows; do not scan this morning's leftovers. */
-const LOOKBACK_HOURS = 0.5;
+/** Cover a live match without pulling this morning's leftover LIVE rows. */
+const LOOKBACK_HOURS = 3;
 const DEFAULT_TSDB_CAP = 25;
 
 export function isSofascoreLogosEnabled(env = process.env) {
@@ -145,10 +145,7 @@ export async function runOddspapiSyncLogos({
   const rows = await prisma.fixture.findMany({
     where: {
       provider: PROVIDER,
-      OR: [
-        { status: { in: ["LIVE", "HT"] } },
-        { start_time: { gte: from, lte: to } },
-      ],
+      start_time: { gte: from, lte: to },
     },
     select: {
       id: true,
