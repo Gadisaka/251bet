@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppIcon from "../common/AppIcon";
-import LogoImg from "../common/LogoImg";
+import LogoImg, { LogoSlot } from "../common/LogoImg";
 import ExpansionMarketSection from "../common/ExpansionMarketSection";
 import Panel from "../common/Panel";
 import {
@@ -159,6 +159,7 @@ function MatchRow({
           className="flex cursor-pointer flex-col justify-center gap-1 px-2.5 py-1.5 hover:bg-[#0a0a0a]/35"
         >
           <div className="flex min-w-0 items-center gap-2">
+            <LogoSlot src={match.homeTeamLogo} alt="" size={16} />
             <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-white">
               {home}
             </span>
@@ -169,6 +170,7 @@ function MatchRow({
             ) : null}
           </div>
           <div className="flex min-w-0 items-center gap-2">
+            <LogoSlot src={match.awayTeamLogo} alt="" size={16} />
             <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-white">
               {away}
             </span>
@@ -575,6 +577,14 @@ function MatchesTable({
                 ) : (
                   <AppIcon name="circleDot" size={13} />
                 )}
+                {head?.leagueLogo ? (
+                  <LogoImg
+                    src={head.leagueLogo}
+                    alt=""
+                    size={16}
+                    className="border border-transparent bg-[#000000]/20"
+                  />
+                ) : null}
                 <span className="min-w-0 flex-1 truncate">
                   {formatLeagueLabel(league)}
                 </span>

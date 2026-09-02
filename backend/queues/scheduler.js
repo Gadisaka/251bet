@@ -284,6 +284,17 @@ function buildRepeatables() {
           jobId: toJobId(REPEATABLE_JOB_NAMES.ODDSPAPI_REAP_STALE_LIVE),
         },
       },
+      {
+        queue: q,
+        name: REPEATABLE_JOB_NAMES.ODDSPAPI_SYNC_LOGOS,
+        data: {},
+        opts: {
+          repeat: {
+            every: envMinutes("ODDSPAPI_LOGOS_MINUTES", 10 * MINUTES),
+          },
+          jobId: toJobId(REPEATABLE_JOB_NAMES.ODDSPAPI_SYNC_LOGOS),
+        },
+      },
     );
   }
 

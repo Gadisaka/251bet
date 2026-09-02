@@ -9,6 +9,7 @@ import {
   windowToRange,
 } from "../../services/providers/oddspapi/normalize.js";
 import { shadowStatsIncr } from "./cache.js";
+import { flagUrlForCategory } from "../../services/providers/oddspapi/countryFlag.js";
 
 const SPORT_SLUG = "football";
 
@@ -21,27 +22,24 @@ async function getFootballSport() {
 }
 
 async function upsertLeague(fx, sportId) {
+  const countryFlag = flagUrlForCategory(fx.categorySlug);
+  const data = {
+    name: fx.tournamentName,
+    country: fx.categoryName,
+    provider: PROVIDER,
+    provider_tournament_id: fx.tournamentId,
+    category_slug: fx.categorySlug,
+    category_name: fx.categoryName,
+    active: true,
+    ...(countryFlag ? { country_flag: countryFlag } : {}),
+  };
   return upsertNoTx(prisma.league, {
     where: { api_league_id: fx.api_league_id },
-    update: {
-      name: fx.tournamentName,
-      country: fx.categoryName,
-      provider: PROVIDER,
-      provider_tournament_id: fx.tournamentId,
-      category_slug: fx.categorySlug,
-      category_name: fx.categoryName,
-      active: true,
-    },
+    update: data,
     create: {
       api_league_id: fx.api_league_id,
       sport_id: sportId,
-      name: fx.tournamentName,
-      country: fx.categoryName,
-      provider: PROVIDER,
-      provider_tournament_id: fx.tournamentId,
-      category_slug: fx.categorySlug,
-      category_name: fx.categoryName,
-      active: true,
+      ...data,
     },
   });
 }

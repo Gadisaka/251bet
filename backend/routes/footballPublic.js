@@ -27,6 +27,7 @@ import {
 import { recomputeExtraMarketsCountForFixture } from "../services/extraMarketsCount.js";
 import { isOddspapiRow, notOddspapiWhere, PROVIDER_ODDSPAPI } from "../services/providers/publicScope.js";
 import { isOddspapiPublic } from "../services/providers/activeProvider.js";
+import { serveSofascoreLogo } from "../services/providers/sofascore/logoProxy.js";
 import {
   buildOddspapiLiveOdds,
   liveDisplayFields,
@@ -330,6 +331,8 @@ router.get("/fixtures", async (req, res) => {
     res.status(500).json({ message: "Failed to load fixtures for date" });
   }
 });
+
+router.get("/logo/:kind/:id", serveSofascoreLogo);
 
 router.get("/leagues", async (_req, res) => {
   try {

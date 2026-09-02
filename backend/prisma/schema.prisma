@@ -243,6 +243,8 @@ model League {
   provider_tournament_id   Int?
   category_slug            String?
   category_name            String?
+  sofascore_tournament_id  Int?
+  logo_checked_at          DateTime?
 
   sport    Sport     @relation(fields: [sport_id], references: [id], onDelete: Restrict)
   matches  Match[]
@@ -262,6 +264,8 @@ model Team {
   league_id   String
   provider                 String @default("apifootball")
   provider_participant_id  Int?
+  sofascore_team_id        Int?
+  logo_checked_at          DateTime?
 
   league        League    @relation(fields: [league_id], references: [id], onDelete: Restrict)
   home_fixtures Fixture[] @relation("FixtureHomeTeam")

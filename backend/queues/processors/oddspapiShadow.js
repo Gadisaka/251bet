@@ -6,6 +6,7 @@ import {
 import { runOddspapiOdds } from "../../jobs/oddspapi/syncOdds.js";
 import { runOddspapiSettlementShadow } from "../../jobs/oddspapi/settlementShadow.js";
 import { runOddspapiReapStaleLive } from "../../jobs/oddspapi/reapStaleLive.js";
+import { runOddspapiSyncLogos } from "../../jobs/oddspapi/syncLogos.js";
 import { getFixturesDaysAhead } from "../../Config/ingestionConfig.js";
 import { isOddspapiShadowEnabled } from "../../services/providers/oddspapi/config.js";
 
@@ -40,6 +41,8 @@ export async function processOddspapiShadow(job) {
       return runOddspapiSettlementShadow(job.data || {});
     case "oddspapi:reap-stale-live":
       return runOddspapiReapStaleLive(job.data || {});
+    case "oddspapi:sync-logos":
+      return runOddspapiSyncLogos();
     default:
       throw new Error(`unknown oddspapi job ${name}`);
   }

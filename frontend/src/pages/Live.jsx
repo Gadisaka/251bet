@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppIcon from "../components/common/AppIcon";
 import ExpansionMarketSection from "../components/common/ExpansionMarketSection";
-import LogoImg from "../components/common/LogoImg";
+import LogoImg, { LogoSlot } from "../components/common/LogoImg";
 import OddsCell from "../components/common/OddsCell";
 import MainLayout from "../components/layout/MainLayout";
 import MobileBottomBar from "../components/layout/MobileBottomBar";
@@ -369,8 +369,21 @@ function LiveRow({ match, isExpanded, onToggle, onOddsClick, selectedOdds }) {
           <LiveIndicator />
           {statusText}
         </span>
-        <span className="min-w-0 truncate font-medium">
-          {String(match.league || "").replace(" - ", " • ")}
+        <span className="flex min-w-0 items-center gap-1.5 font-medium">
+          {match.countryFlag ? (
+            <LogoImg
+              src={match.countryFlag}
+              alt=""
+              size={12}
+              rounded="rounded-[2px]"
+            />
+          ) : null}
+          {match.leagueLogo ? (
+            <LogoImg src={match.leagueLogo} alt="" size={14} />
+          ) : null}
+          <span className="min-w-0 truncate">
+            {String(match.league || "").replace(" - ", " • ")}
+          </span>
         </span>
       </div>
 
@@ -393,6 +406,7 @@ function LiveRow({ match, isExpanded, onToggle, onOddsClick, selectedOdds }) {
           className="flex cursor-pointer flex-col justify-center gap-1 px-2.5 py-1.5 hover:bg-[#0a0a0a]/35"
         >
           <div className="flex min-w-0 items-center gap-2">
+            <LogoSlot src={match.homeTeamLogo} alt="" size={16} />
             <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-white">
               {home}
             </span>
@@ -401,6 +415,7 @@ function LiveRow({ match, isExpanded, onToggle, onOddsClick, selectedOdds }) {
             </span>
           </div>
           <div className="flex min-w-0 items-center gap-2">
+            <LogoSlot src={match.awayTeamLogo} alt="" size={16} />
             <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-white">
               {away}
             </span>
