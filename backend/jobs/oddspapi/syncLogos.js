@@ -18,7 +18,8 @@ import {
 const DEFAULT_BATCH = 40;
 const DEFAULT_SCAN = 400;
 const DEFAULT_RETRY_HOURS = 24;
-const LOOKBACK_HOURS = 6;
+/** Live + upcoming only. A 6h lookback kept the job stuck on morning leftovers. */
+const LOOKBACK_HOURS = 2;
 const DEFAULT_TSDB_CAP = 25;
 
 export function isSofascoreLogosEnabled(env = process.env) {
@@ -208,6 +209,7 @@ export async function runOddspapiSyncLogos({
   let tsdbCalls = 0;
   let updated = 0;
   let failed = 0;
+  let sofaForbidden = 0;
   let skippedNoId = rows.filter((row) => !sofascoreIdFromExternal(row.external_ids)).length;
 
   async function persistPatches(patches) {
@@ -246,8 +248,10 @@ export async function runOddspapiSyncLogos({
       teamSearchCache.set(key, team);
       return team;
     } catch (err) {
-      teamSearchCache.set(key, null);
+      const status = Number(err.status);
       console.warn(`[oddspapi:logos] thesportsdb team "${name}" failed: ${err.message}`);
+      if (status === 429 || status >= 500) return SKIPPED;
+      teamSearchCache.set(key, null);
       return null;
     }
   }
@@ -323,7 +327,7 @@ export async function runOddspapiSyncLogos({
     if (!rowNeedsWork(row, now, backoffMs)) continue;
 
     const eventId = sofascoreIdFromExternal(row.external_ids);
-    if (eventId && fetched < batch) {
+    if (eventId && fetched < batch && sofaForbidden < 2) {
       let payload = sofaCache.get(eventId);
       if (!payload) {
         try {
@@ -334,6 +338,7 @@ export async function runOddspapiSyncLogos({
           sofaCache.set(eventId, { __error: err });
           fetched += 1;
           failed += 1;
+          if (Number(err.status) === 403) sofaForbidden += 1;
           console.warn(`[oddspapi:logos] event ${eventId} failed: ${err.message || err}`);
         }
       }

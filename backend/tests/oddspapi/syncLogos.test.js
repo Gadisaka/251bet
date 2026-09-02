@@ -257,6 +257,38 @@ test("Sofascore 403 falls back to TheSportsDB badges", async () => {
   );
 });
 
+test("TheSportsDB 429 does not mark a miss", async () => {
+  const { prisma, updates } = makePrisma([
+    {
+      id: "f1",
+      external_ids: {},
+      league: entity("l1", { name: "Premier League" }),
+      home_team: entity("h1", { name: "Liverpool FC" }),
+      away_team: entity("a1", { name: "Manchester United" }),
+    },
+  ]);
+  const err = new Error("thesportsdb 429");
+  err.status = 429;
+  const result = await runOddspapiSyncLogos({
+    prisma,
+    fetchEvent: async () => {
+      throw new Error("should not fetch");
+    },
+    searchTeam: async () => {
+      throw err;
+    },
+    lookupLeague: async () => {
+      throw new Error("should not lookup");
+    },
+    deleteByPattern: async () => 0,
+    enabled: true,
+    now: Date.parse("2026-09-02T18:00:00.000Z"),
+  });
+  assert.equal(result.updated, 0);
+  assert.equal(updates.team.length, 0);
+  assert.equal(updates.league.length, 0);
+});
+
 test("disabled flag skips all work", async () => {
   const result = await runOddspapiSyncLogos({
     enabled: false,
