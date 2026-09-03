@@ -5,14 +5,20 @@ import { isPublicFixturesStrictBookmaker } from "../Config/ingestionConfig.js";
 import { getLeagueRank } from "../Config/leagueRanks.js";
 import { notOddspapiWhere } from "./providers/publicScope.js";
 
-/** Slim list endpoint GET /fixtures?date= — Match Winner + Double Chance only. */
+/** Slim list endpoint GET /fixtures?date= — 1X2, DC, BTTS, and totals for MOTD. */
 const FIXTURES_SUMMARY_ODD_LINES_PER_MARKET = Number(
-  process.env.FIXTURES_SUMMARY_ODD_LINES_PER_MARKET || 3,
+  process.env.FIXTURES_SUMMARY_ODD_LINES_PER_MARKET || 10,
 );
 const FIXTURES_SUMMARY_MARKET_LIMIT = Number(
-  process.env.FIXTURES_SUMMARY_MARKET_LIMIT || 2,
+  process.env.FIXTURES_SUMMARY_MARKET_LIMIT || 6,
 );
-const SUMMARY_MARKET_NAMES = ["Match Winner", "Double Chance"];
+const SUMMARY_MARKET_NAMES = [
+  "Match Winner",
+  "Double Chance",
+  "Goals Over/Under",
+  "Both Teams Score",
+  "Both Teams To Score",
+];
 const UPCOMING_FIXTURES_LIMIT = Number(
   process.env.UPCOMING_FIXTURES_LIMIT || 800,
 );
@@ -20,7 +26,7 @@ const UPCOMING_MIN_START_BUFFER_MINUTES = 5;
 const UPCOMING_ALLOWED_STATUSES = new Set(["NS", "TBD"]);
 
 /** Bumped when list payload / query semantics change (slim select, no bookmaker join). */
-export const FIXTURES_BY_DATE_CACHE_VERSION = "v6";
+export const FIXTURES_BY_DATE_CACHE_VERSION = "v7";
 
 const MAIN_MARKET_NAMES = [
   "Match Winner",

@@ -306,7 +306,7 @@ function listQueryBookmakerId(preferred) {
 
 /**
  * GET /fixtures?date=YYYY-MM-DD — prematch fixtures for one UTC calendar day
- * with minimal Match Winner + Double Chance odds only (list performance).
+ * with Match Winner, Double Chance, BTTS, and Goals Over/Under (list + MOTD).
  * Cache rebuild is coalesced in fixturesListService (single-flight).
  */
 router.get("/fixtures", async (req, res) => {

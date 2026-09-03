@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  MIN_MULTIPLE_CARDS,
   buildMultipleOfTheDayTickets,
   ticketToSlipSelections,
 } from "./multipleOfTheDay.js";
@@ -17,8 +18,14 @@ function match({
   homeOdd = "1.55",
   awayOdd = "5.20",
   drawOdd = "3.80",
+  dc1x = "1.28",
+  dc12 = "1.22",
+  bttsYes = "1.72",
+  over25 = "1.68",
+  under25 = "1.85",
+  extras = true,
 } = {}) {
-  return {
+  const row = {
     id: `fx-${id}`,
     apiFixtureId: id,
     sportId,
@@ -33,8 +40,31 @@ function match({
       { id: "1", value: homeOdd },
       { id: "x", value: drawOdd },
       { id: "2", value: awayOdd },
+      { id: "1x", value: dc1x },
+      { id: "12", value: dc12 },
+      { id: "x2", value: "1.95" },
     ],
+    detailedOdds: { main: [], extra: [] },
   };
+  if (extras) {
+    row.detailedOdds.extra = [
+      {
+        category: "Both Teams Score",
+        odds: [
+          { id: "Yes", value: bttsYes },
+          { id: "No", value: "2.05" },
+        ],
+      },
+      {
+        category: "Goals Over/Under",
+        odds: [
+          { id: "Over 2.5", value: over25 },
+          { id: "Under 2.5", value: under25 },
+        ],
+      },
+    ];
+  }
+  return row;
 }
 
 function upcoming(id, home, extra = {}) {
@@ -68,50 +98,18 @@ describe("buildMultipleOfTheDayTickets", () => {
       upcoming(6, "United"),
     ];
     const tickets = buildMultipleOfTheDayTickets(pool, { now: NOW });
-    expect(tickets).toHaveLength(1);
-    expect(tickets[0].legs.map((leg) => leg.matchName)).toEqual([
+    const result = tickets.find((t) => t.id === "mod-match-result");
+    expect(result.legs.map((leg) => leg.matchName)).toEqual([
       "Arsenal V Away 1",
       "City V Away 5",
       "United V Away 6",
     ]);
   });
 
-  it("builds distinct match-result, home, and away cards from live 1X2 prices", () => {
-    const pool = [
-      upcoming(1, "Arsenal", { leagueRank: 1, homeOdd: "1.45", awayOdd: "6.50" }),
-      upcoming(2, "Liverpool", { leagueRank: 1, homeOdd: "1.50", awayOdd: "6.00" }),
-      upcoming(3, "City", { leagueRank: 1, homeOdd: "1.60", awayOdd: "5.40" }),
-      upcoming(4, "Chelsea", { leagueRank: 2, homeOdd: "1.70", awayOdd: "4.80" }),
-      upcoming(5, "United", { leagueRank: 2, homeOdd: "1.80", awayOdd: "4.20" }),
-      upcoming(6, "Villa", { leagueRank: 3, homeOdd: "1.90", awayOdd: "3.90" }),
-      upcoming(7, "Brighton", { leagueRank: 8, homeOdd: "2.05", awayOdd: "3.40" }),
-      upcoming(8, "Fulham", { leagueRank: 9, homeOdd: "2.10", awayOdd: "3.20" }),
-      upcoming(9, "Brentford", {
-        leagueRank: 10,
-        homeOdd: "3.80",
-        awayOdd: "1.85",
-      }),
-      upcoming(10, "Wolves", {
-        leagueRank: 11,
-        homeOdd: "3.60",
-        awayOdd: "1.90",
-      }),
-      upcoming(11, "Everton", {
-        leagueRank: 12,
-        homeOdd: "3.40",
-        awayOdd: "1.95",
-      }),
-      upcoming(12, "Palace", {
-        leagueRank: 13,
-        homeOdd: "3.20",
-        awayOdd: "2.05",
-      }),
-      upcoming(13, "West Ham", {
-        leagueRank: 14,
-        homeOdd: "3.10",
-        awayOdd: "2.10",
-      }),
-    ];
+  it("builds at least six mixed-market cards from live prices", () => {
+    const pool = Array.from({ length: 12 }, (_, i) =>
+      upcoming(i + 1, `Home ${i + 1}`, { leagueRank: i + 1 }),
+    );
     const tickets = buildMultipleOfTheDayTickets(pool, {
       now: NOW,
       bonuses: [
@@ -122,35 +120,37 @@ describe("buildMultipleOfTheDayTickets", () => {
       ],
     });
 
-    expect(tickets.map((t) => t.id)).toEqual([
-      "mod-match-result",
-      "mod-home-wins",
-      "mod-away-wins",
-    ]);
+    expect(tickets.length).toBeGreaterThanOrEqual(MIN_MULTIPLE_CARDS);
+    expect(tickets.map((t) => t.id)).toEqual(
+      expect.arrayContaining([
+        "mod-match-result",
+        "mod-double-chance",
+        "mod-btts",
+        "mod-over-25",
+        "mod-mixed",
+        "mod-under-25",
+      ]),
+    );
     expect(tickets[0].bonusPercent).toBe(10);
-    expect(tickets[0].legs).toHaveLength(5);
-    expect(tickets[0].legs.every((leg) => leg.label === "1")).toBe(true);
-    expect(tickets[2].legs.every((leg) => leg.label === "2")).toBe(true);
 
-    const fixtureIds = tickets.flatMap((t) => t.legs.map((leg) => leg.apiFixtureId));
-    expect(new Set(fixtureIds).size).toBe(fixtureIds.length);
+    const mixed = tickets.find((t) => t.id === "mod-mixed");
+    const mixedCodes = new Set(mixed.legs.map((leg) => leg.marketCode));
+    expect(mixedCodes.size).toBeGreaterThan(1);
   });
 
-  it("maps a ticket onto slip selections the place-bet API can send", () => {
+  it("maps a BTTS ticket onto slip selections the place-bet API can send", () => {
     const tickets = buildMultipleOfTheDayTickets(
       [upcoming(1, "Arsenal"), upcoming(2, "Liverpool"), upcoming(3, "City")],
       { now: NOW },
     );
-    const selections = ticketToSlipSelections(tickets[0]);
+    const btts = tickets.find((t) => t.id === "mod-btts");
+    const selections = ticketToSlipSelections(btts);
     expect(selections[0]).toMatchObject({
       apiFixtureId: 1,
-      matchName: "Arsenal V Away 1",
-      marketCode: "MATCH_WINNER",
-      marketParams: { side: "HOME" },
-      label: "1",
-      value: "1.55",
+      marketCode: "BTTS",
+      marketParams: { pick: "YES" },
+      label: "YES",
       fromLive: false,
     });
-    expect(selections[0].id).toBe("Arsenal V Away 1-1");
   });
 });
