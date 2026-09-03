@@ -14,6 +14,7 @@ import { MATCH_MARKET_TABS } from "../utils/sportsbookDisplay";
 import HomeDiscoverSections from "../components/sections/HomeDiscoverSections";
 import MatchesTabs from "../components/sections/MatchesTabs";
 import NextCalendarDayFooter from "../components/sections/NextCalendarDayFooter";
+import DesktopHome from "../components/home/desktop/DesktopHome";
 import {
   sportsList,
   sportsbookToolbar,
@@ -76,6 +77,8 @@ function Home() {
   const pendingOpenKickoffRef = useRef(null);
   const [activeSlip] = useState(initialBet.activeSlip);
   const [slips, setSlips] = useState(initialBet.slips);
+  const [desktopSlipOpen, setDesktopSlipOpen] = useState(false);
+  const upcomingRef = useRef(null);
   const selectedOdds = useMemo(
     () => new Set((slips[activeSlip] || []).map((selection) => selection.id)),
     [activeSlip, slips],
@@ -368,6 +371,18 @@ function Home() {
     navigate(".", { replace: true, state: {} });
   }, [handleOpenSelectionOnHome, location.state?.openFixtureId, location.state?.kickoffAt, navigate]);
 
+  const handleLoadTicket = useCallback(
+    (nextSelections) => {
+      handleReplaceSlipSelections(nextSelections);
+      setDesktopSlipOpen(true);
+    },
+    [handleReplaceSlipSelections],
+  );
+
+  const handleScrollUpcoming = useCallback(() => {
+    upcomingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   /** Top-ranked kickoffs feed the Popular Matches block above the main list. */
   const popularMatches = useMemo(
     () =>
@@ -378,6 +393,19 @@ function Home() {
             new Date(a.kickoffAt || 0) - new Date(b.kickoffAt || 0),
         )
         .slice(0, 3),
+    [allMatches],
+  );
+
+  const suggestedMatches = useMemo(
+    () =>
+      [...allMatches]
+        .filter((match) => String(match.sportId || "").toLowerCase() === "football")
+        .sort(
+          (a, b) =>
+            (a.leagueRank ?? 9999) - (b.leagueRank ?? 9999) ||
+            new Date(a.kickoffAt || 0) - new Date(b.kickoffAt || 0),
+        )
+        .slice(0, 8),
     [allMatches],
   );
 
@@ -491,75 +519,106 @@ function Home() {
   return (
     <PageContainer>
       <div className="sticky top-0 z-50">
-        <TopHeader data={topHeaderData} />
+        <TopHeader
+          data={topHeaderData}
+          slipCount={selections?.length || 0}
+          onOpenSlip={() => setDesktopSlipOpen(true)}
+        />
         <PrimaryNav items={topNavItems} />
       </div>
       <div className="relative">
         <MainLayout
           center={
             <>
-              <HeroBanner />
-              <HomeDiscoverSections
-                popularMatches={popularMatches}
-                liveMatches={liveMatches}
-                multiples={[]}
-                onMoreLive={() => navigate("/live")}
-                onOddsClick={handleOddsClick}
-                selectedOdds={selectedOdds}
-              />
-              <MatchesTabs
-                sports={toolbarSports}
-                markets={MATCH_MARKET_TABS}
-                selectedSportId={selectedSportId}
-                selectedTimeId={resolvedTimeId}
-                selectedMarketId={selectedMarketId}
-                onSportChange={setSelectedSportId}
-                onTimeChange={setSelectedTimeId}
-                onMarketChange={setSelectedMarketId}
-                searchQuery={clubSearch}
-                onSearchChange={setClubSearch}
-              />
-              {!loading && error ? (
-                <div
-                  className="mb-3 flex flex-col items-start gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-50 sm:flex-row sm:items-center sm:justify-between"
-                  role="alert"
-                >
-                  <p>
-                    {error?.message ||
-                      "Couldn't load matches. Please try again."}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => refreshAll()}
-                    className="shrink-0 rounded-lg bg-(--sb-accent-fill) px-3 py-1.5 text-xs font-semibold text-[#111111] hover:brightness-110"
-                  >
-                    Retry
-                  </button>
-                </div>
-              ) : null}
-              <MatchesTable
-                matches={matchesPagination.items}
-                onMatchClick={handleMatchClick}
-                onOddsClick={handleOddsClick}
-                selectedOdds={selectedOdds}
-                expandedMatchId={expandedMatchId}
-                oddsDetailByFixtureId={oddsDetailByFixtureId}
-                marketTabId={selectedMarketId}
-              />
-              <MatchesPagination
-                page={matchesPagination.page}
-                totalPages={matchesPagination.totalPages}
-                onPageChange={handleMatchesPageChange}
-              />
-              {!loading && !String(clubSearch).trim() ? (
-                <NextCalendarDayFooter
-                  resolvedTimeId={resolvedTimeId}
-                  timeOptions={timeOptions}
-                  horizonDays={PREMATCH_HORIZON_DAYS}
-                  onSelectDay={handleNextCalendarDay}
+              <div className="lg:hidden">
+                <HeroBanner />
+                <HomeDiscoverSections
+                  popularMatches={popularMatches}
+                  liveMatches={liveMatches}
+                  onMoreLive={() => navigate("/live")}
+                  onOddsClick={handleOddsClick}
+                  selectedOdds={selectedOdds}
+                  onLoadTicket={handleLoadTicket}
                 />
-              ) : null}
-              <HomeCasinoRails />
+                <MatchesTabs
+                  sports={toolbarSports}
+                  markets={MATCH_MARKET_TABS}
+                  selectedSportId={selectedSportId}
+                  selectedTimeId={resolvedTimeId}
+                  selectedMarketId={selectedMarketId}
+                  onSportChange={setSelectedSportId}
+                  onTimeChange={setSelectedTimeId}
+                  onMarketChange={setSelectedMarketId}
+                  searchQuery={clubSearch}
+                  onSearchChange={setClubSearch}
+                />
+                {!loading && error ? (
+                  <div
+                    className="mb-3 flex flex-col items-start gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-50 sm:flex-row sm:items-center sm:justify-between"
+                    role="alert"
+                  >
+                    <p>
+                      {error?.message ||
+                        "Couldn't load matches. Please try again."}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => refreshAll()}
+                      className="shrink-0 rounded-lg bg-(--sb-accent-fill) px-3 py-1.5 text-xs font-semibold text-[#111111] hover:brightness-110"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : null}
+                <MatchesTable
+                  matches={matchesPagination.items}
+                  onMatchClick={handleMatchClick}
+                  onOddsClick={handleOddsClick}
+                  selectedOdds={selectedOdds}
+                  expandedMatchId={expandedMatchId}
+                  oddsDetailByFixtureId={oddsDetailByFixtureId}
+                  marketTabId={selectedMarketId}
+                />
+                <MatchesPagination
+                  page={matchesPagination.page}
+                  totalPages={matchesPagination.totalPages}
+                  onPageChange={handleMatchesPageChange}
+                />
+                {!loading && !String(clubSearch).trim() ? (
+                  <NextCalendarDayFooter
+                    resolvedTimeId={resolvedTimeId}
+                    timeOptions={timeOptions}
+                    horizonDays={PREMATCH_HORIZON_DAYS}
+                    onSelectDay={handleNextCalendarDay}
+                  />
+                ) : null}
+                <HomeCasinoRails />
+              </div>
+              <div className="hidden lg:block">
+                <DesktopHome
+                  upcomingRef={upcomingRef}
+                  suggestedMatches={suggestedMatches}
+                  sports={toolbarSports}
+                  markets={MATCH_MARKET_TABS}
+                  selectedSportId={selectedSportId}
+                  selectedTimeId={resolvedTimeId}
+                  selectedMarketId={selectedMarketId}
+                  onSportChange={setSelectedSportId}
+                  onTimeChange={setSelectedTimeId}
+                  onMarketChange={setSelectedMarketId}
+                  onScrollUpcoming={handleScrollUpcoming}
+                  matches={matchesPagination.items}
+                  onMatchClick={handleMatchClick}
+                  onOddsClick={handleOddsClick}
+                  selectedOdds={selectedOdds}
+                  expandedMatchId={expandedMatchId}
+                  oddsDetailByFixtureId={oddsDetailByFixtureId}
+                  onLoadTicket={handleLoadTicket}
+                  matchesPage={matchesPagination.page}
+                  matchesTotalPages={matchesPagination.totalPages}
+                  onMatchesPageChange={handleMatchesPageChange}
+                />
+              </div>
             </>
           }
         />
@@ -572,7 +631,7 @@ function Home() {
           aria-busy="true"
           aria-label="Loading"
         >
-          <div className="relative flex h-56 w-56 items-center justify-center sm:h-64 sm:w-64">
+          <div className="relative flex h-56 w-72 items-center justify-center sm:h-64 sm:w-80">
             <div className="absolute h-52 w-52 animate-pulse rounded-full bg-(--sb-accent-fill)/30 blur-3xl sm:h-56 sm:w-56" />
             <div className="absolute h-36 w-36 animate-ping rounded-full border border-(--sb-accent-fill)/55" />
             <div className="absolute h-28 w-28 animate-spin rounded-full border-2 border-transparent border-t-(--sb-accent-fill) border-r-(--sb-accent-fill)/35 sm:h-32 sm:w-32" />
@@ -580,7 +639,7 @@ function Home() {
               src={loadingLogo}
               alt=""
               decoding="async"
-              className="relative z-10 h-[min(7.5rem,42vmin)] w-[min(7.5rem,42vmin)] object-contain drop-shadow-[0_8px_24px_rgba(0,0,0,0.45)] sm:h-[min(8.5rem,38vmin)] sm:w-[min(8.5rem,38vmin)]"
+              className="relative z-10 h-[min(6.5rem,36vmin)] w-[min(12rem,68vmin)] object-contain drop-shadow-[0_8px_24px_rgba(0,0,0,0.45)] sm:h-[min(7.5rem,34vmin)] sm:w-[min(14rem,62vmin)]"
             />
           </div>
         </div>
@@ -594,6 +653,8 @@ function Home() {
         onSelectionClick={handleOpenSelectionOnHome}
         leaguesSidebarProps={topLeaguesSidebarProps}
         liveCount={liveMatches.length}
+        slipOpen={desktopSlipOpen}
+        onSlipOpenChange={setDesktopSlipOpen}
       />
     </PageContainer>
   );

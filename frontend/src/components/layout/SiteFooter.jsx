@@ -1,10 +1,8 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import AppIcon from "../common/AppIcon";
 import AgeRestrictionNotice from "../common/AgeRestrictionNotice";
 import { topHeaderData } from "../../data/homepageData";
-import { fetchPlayerInfoPages } from "../../services/api";
-import { pickTelegramContactFromPages } from "../../utils/telegramContact";
+import { useTelegramContact } from "../../hooks/useTelegramContact";
 import { useTranslation } from "../../i18n/LanguageContext.jsx";
 
 const footerGroups = [
@@ -32,26 +30,9 @@ const footerGroups = [
 
 function SiteFooter() {
   const { t } = useTranslation();
-  const [telegram, setTelegram] = useState(null);
+  const telegram = useTelegramContact();
   const brand = topHeaderData.brand || "251Bet";
   const year = new Date().getFullYear();
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchPlayerInfoPages()
-      .then((data) => {
-        if (cancelled) return;
-        setTelegram(
-          pickTelegramContactFromPages(data?.pages, data?.telegramHref),
-        );
-      })
-      .catch(() => {
-        if (!cancelled) setTelegram(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   return (
     <footer className="mt-0 border-t border-(--sb-border) bg-(--sb-bg-2) px-4 pb-8 pt-6">

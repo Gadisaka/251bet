@@ -4,6 +4,7 @@ import { enforcePlayerSession } from './utils/authSession'
 import Home from './pages/Home'
 import { LanguageProvider } from './i18n/LanguageContext.jsx'
 
+const Sport = lazy(() => import('./pages/Sport'))
 const Live = lazy(() => import('./pages/Live'))
 const Casino = lazy(() => import('./pages/Casino'))
 const Login = lazy(() => import('./pages/Login'))
@@ -49,6 +50,7 @@ function App() {
     <Suspense fallback={<RouteFallback />}>
     <Routes>
       <Route path="/" element={<Home />} />
+      <Route path="/sport" element={<Sport />} />
       <Route path="/live" element={<Live />} />
       <Route path="/casino" element={<Casino />} />
       <Route path="/matchdetail/:id" element={<Home />} />

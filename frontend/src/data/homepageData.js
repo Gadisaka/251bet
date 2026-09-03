@@ -11,7 +11,7 @@ export const topHeaderData = {
  * slots after the HOME/LIVE navigation entries.
  */
 export const topNavItems = [
-  { id: "home", icon: "home", path: "/" },
+  { id: "home", icon: "circleDot", path: "/sport" },
   { id: "live", icon: "radio", path: "/live" },
   { id: "games", icon: "gamepad", path: "/casino" },
 ];

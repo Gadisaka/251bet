@@ -1,16 +1,15 @@
 import { useEffect, useState } from "react";
 import { fetchPlayerSiteBranding } from "../services/api";
-import logoWide from "../assets/Asset2.png";
-import logoCompact from "../assets/Asset5.png";
+import brandLogo from "../assets/logo.png";
 
 function isValidHttpsLogoUrl(s) {
   return typeof s === "string" && s.trim().startsWith("https://");
 }
 
 const defaultResolved = Object.freeze({
-  navbarWide: logoWide,
-  navbarCompact: logoCompact,
-  loadingLogo: logoCompact,
+  navbarWide: brandLogo,
+  navbarCompact: brandLogo,
+  loadingLogo: brandLogo,
 });
 
 let brandingFetchPromise = null;
@@ -38,13 +37,13 @@ export function usePlayerSiteBranding() {
       if (cancelled) return;
       const wide = isValidHttpsLogoUrl(data?.navbarWide)
         ? data.navbarWide.trim()
-        : logoWide;
+        : brandLogo;
       const compact = isValidHttpsLogoUrl(data?.navbarCompact)
         ? data.navbarCompact.trim()
-        : logoCompact;
+        : brandLogo;
       const loading = isValidHttpsLogoUrl(data?.loadingLogo)
         ? data.loadingLogo.trim()
-        : logoCompact;
+        : brandLogo;
       setResolved({ navbarWide: wide, navbarCompact: compact, loadingLogo: loading });
     });
     return () => {

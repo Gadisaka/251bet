@@ -1,8 +1,10 @@
 import AppIcon from "../common/AppIcon";
 import SectionHeader from "../common/SectionHeader";
 import MatchesTable from "./MatchesTable";
+import DesktopMultiples from "../home/desktop/DesktopMultiples";
 import { sportAccentColor } from "../../utils/sportsbookDisplay";
 import { useTranslation } from "../../i18n/LanguageContext.jsx";
+import { mockMultipleOfTheDay } from "../../data/mockSportsbook";
 
 /** Centered muted copy used wherever a section has nothing to show. */
 function EmptyState({ children }) {
@@ -40,11 +42,11 @@ function LiveMatchRow({ match }) {
 function HomeDiscoverSections({
   popularMatches = [],
   liveMatches = [],
-  multiples = [],
   onMoreLive,
   onMorePopular,
   onOddsClick,
   selectedOdds,
+  onLoadTicket,
 }) {
   const { t } = useTranslation();
   const liveHead = liveMatches[0];
@@ -69,33 +71,10 @@ function HomeDiscoverSections({
         )}
       </section>
 
-      <section>
-        <SectionHeader title={t("home.multipleOfDay")} onMore={() => {}} />
-        {multiples.length === 0 ? (
-          <EmptyState>{t("home.noMultiples")}</EmptyState>
-        ) : (
-          <div className="flex flex-col">
-            {multiples.map((leg) => (
-              <div
-                key={leg.id}
-                className="flex items-center justify-between gap-2 border-b border-(--sb-border) bg-(--sb-bg-card) px-2.5 py-2"
-              >
-                <div className="min-w-0">
-                  <p className="m-0 truncate text-[12px] font-medium text-white">
-                    {leg.match}
-                  </p>
-                  <p className="m-0 truncate text-[10px] text-(--sb-text-muted)">
-                    {leg.market}
-                  </p>
-                </div>
-                <span className="shrink-0 text-[12px] font-bold text-(--sb-odds)">
-                  {leg.value}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <DesktopMultiples
+        tickets={mockMultipleOfTheDay}
+        onLoadTicket={onLoadTicket}
+      />
 
       <section>
         <SectionHeader title={t("home.live")} onMore={onMoreLive} />

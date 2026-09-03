@@ -120,6 +120,7 @@ function BetSlipPanel({
   onReplaceSelections = () => {},
   onSelectionClick,
   slipCounts = {},
+  className = "",
 }) {
   const [stakeInput, setStakeInput] = useState("20");
   const [placing, setPlacing] = useState(false);
@@ -486,7 +487,9 @@ function BetSlipPanel({
 
   return (
     <>
-      <section className="sb-card flex min-h-[340px] flex-col overflow-hidden">
+      <section
+        className={`sb-card flex min-h-[340px] flex-col overflow-hidden ${className}`.trim()}
+      >
         <div className="bg-(--sb-accent-fill) px-3 py-2 text-[12px] font-bold uppercase tracking-wide text-(--sb-accent-text-on-dark)">
           BetSlip
         </div>

@@ -3,6 +3,7 @@ import AppIcon from "../common/AppIcon";
 const SIZE_CLASS = {
   rail: "w-[92px] shrink-0 aspect-[3/4] sm:w-[104px]",
   featured: "w-[92px] shrink-0 aspect-[3/4] sm:w-[104px]",
+  desktop: "w-[124px] shrink-0 aspect-[3/4]",
   sm: "w-full aspect-square",
   lg: "w-full aspect-[3/4]",
 };

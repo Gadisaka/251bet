@@ -49,6 +49,7 @@ function TopLeaguesSidebar({
   dateDropdownOptions = [],
   searchQuery = "",
   onSearchChange,
+  searchPlaceholder,
   panelClassName = "",
   /** When true, only “All leagues” and the league list (no search / time / date UI). */
   leaguesListOnly = false,
@@ -197,7 +198,9 @@ function TopLeaguesSidebar({
                 type="search"
                 value={searchQuery}
                 onChange={(e) => onSearchChange?.(e.target.value)}
-                placeholder={t("sidebar.searchClubsPlaceholder")}
+                placeholder={
+                  searchPlaceholder || t("sidebar.searchClubsPlaceholder")
+                }
                 className="min-w-0 flex-1 border-0 bg-transparent text-[11px] font-semibold text-[#dce2f0] placeholder:text-[#5b6a8f] outline-none"
                 aria-label={t("sidebar.searchClubsAria")}
               />

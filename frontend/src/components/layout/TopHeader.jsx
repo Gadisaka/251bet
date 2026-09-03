@@ -5,7 +5,10 @@ import DesktopUserSidebar from "./DesktopUserSidebar";
 import MobileMenu from "./MobileMenu";
 import { fetchNotificationUnreadCount, fetchPlayerWallet } from "../../services/api";
 import NotificationsDialog from "../notifications/NotificationsDialog";
+import { useTelegramContact } from "../../hooks/useTelegramContact";
 import { useLanguage, useTranslation } from "../../i18n/LanguageContext.jsx";
+import { SPORTSBOOK_TIMEZONE } from "../../utils/sportsbookDay.js";
+import brandLogo from "../../assets/logo.png";
 
 const LANG_FLAG = Object.freeze({
   en: { code: "gb", label: "English" },
@@ -16,9 +19,36 @@ function flagSrc(iso2) {
   return `https://flagcdn.com/w40/${iso2}.png`;
 }
 
-function TopHeader() {
+function HeaderClock() {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const label = now.toLocaleTimeString("en-GB", {
+    timeZone: SPORTSBOOK_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+
+  return (
+    <time
+      className="hidden tabular-nums text-[12px] font-medium tracking-wide text-white/90 lg:inline"
+      dateTime={now.toISOString()}
+    >
+      {label}
+    </time>
+  );
+}
+
+function TopHeader({ slipCount = 0, onOpenSlip = null }) {
   const { language, setLanguage } = useLanguage();
   const { t } = useTranslation();
+  const telegram = useTelegramContact();
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const langMenuRef = useRef(null);
   const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
@@ -126,15 +156,40 @@ function TopHeader() {
 
   return (
     <>
-      <header className="flex h-12 min-w-0 items-center gap-2 overflow-visible border-b border-(--sb-header-border) bg-(--sb-header) px-2 sm:px-3">
+      <header className="flex h-12 min-w-0 items-center gap-2 overflow-visible border-b border-(--sb-header-border) bg-(--sb-header) px-2 sm:px-3 lg:h-14 lg:px-4">
         <Link
           to="/"
-          className="mr-auto inline-flex shrink-0 items-baseline gap-0 text-[20px] font-black italic tracking-tight no-underline sm:text-[22px]"
+          className="inline-flex h-9 shrink-0 items-center no-underline sm:h-10 lg:h-11"
           aria-label="251Bet"
         >
-          <span className="text-(--sb-accent-fill)">251</span>
-          <span className="text-white">BET</span>
+          <img
+            src={brandLogo}
+            alt="251Bet"
+            className="h-full w-auto object-contain object-left"
+          />
         </Link>
+
+        {telegram?.link ? (
+          <a
+            href={telegram.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#229ED9] text-white no-underline lg:inline-flex"
+            aria-label={t("header.telegram")}
+          >
+            {telegram.logo ? (
+              <img
+                src={telegram.logo}
+                alt=""
+                className="h-4 w-4 rounded-full object-cover"
+              />
+            ) : (
+              <AppIcon name="send" size={13} strokeWidth={2.4} />
+            )}
+          </a>
+        ) : null}
+
+        <div className="mr-auto min-w-0" />
 
         {isLoggedIn ? (
           <div className="relative flex items-center gap-1.5 text-sm text-white">
@@ -189,7 +244,8 @@ function TopHeader() {
               to="/login"
               className="text-[11px] font-bold uppercase tracking-wide text-white underline-offset-2 no-underline hover:underline"
             >
-              {t("header.login")}
+              <span className="lg:hidden">{t("header.login")}</span>
+              <span className="hidden lg:inline">{t("header.signIn")}</span>
             </Link>
             <Link
               to="/register"
@@ -259,6 +315,28 @@ function TopHeader() {
             </ul>
           ) : null}
         </div>
+
+        <HeaderClock />
+
+        {onOpenSlip ? (
+          <button
+            type="button"
+            onClick={onOpenSlip}
+            className="relative hidden h-8 cursor-pointer items-center justify-center border-0 bg-transparent px-1 text-white hover:text-(--sb-accent-fill) lg:inline-flex"
+            aria-label={
+              slipCount > 0
+                ? `${t("header.betSlip")} (${slipCount})`
+                : t("header.betSlip")
+            }
+          >
+            <AppIcon name="receipt" size={16} />
+            {slipCount > 0 ? (
+              <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-(--sb-accent-fill) px-1 text-[9px] font-bold text-(--sb-accent-text-on-dark)">
+                {slipCount > 99 ? "99+" : slipCount}
+              </span>
+            ) : null}
+          </button>
+        ) : null}
 
         <button
           type="button"

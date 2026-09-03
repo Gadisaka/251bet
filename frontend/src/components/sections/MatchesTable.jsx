@@ -83,6 +83,44 @@ function MatchMetaFooter({ sideBets }) {
   );
 }
 
+function formatDesktopKickoff(date, kickoffAt) {
+  if (kickoffAt) {
+    const parsed = new Date(kickoffAt);
+    if (!Number.isNaN(parsed.getTime())) {
+      const day = parsed.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "2-digit",
+      });
+      const time = parsed.toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+      return `${day}, ${time}`;
+    }
+  }
+  const { datePart, timePart } = parseDate(date);
+  return [datePart, timePart].filter(Boolean).join(", ");
+}
+
+function DesktopOddButton({ value, selected, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!value}
+      className={`flex h-10 min-w-[72px] cursor-pointer items-center justify-center rounded-md border-0 px-2 text-[13px] font-bold disabled:cursor-default ${
+        selected
+          ? "bg-(--sb-accent-fill) text-[#111]"
+          : "bg-[#111111] text-(--sb-odds) hover:bg-[#1c1c1c]"
+      }`}
+    >
+      {value ?? "-"}
+    </button>
+  );
+}
+
 function MatchRow({
   match,
   isExpanded,
@@ -92,6 +130,7 @@ function MatchRow({
   children,
   rowRef,
   marketTab = DEFAULT_MARKET_TAB,
+  variant = "mobile",
 }) {
   const marketMap = useMemo(
     () =>
@@ -117,6 +156,75 @@ function MatchRow({
   const selections = marketTab.selections.filter(
     (id) => id !== "x" || marketMap.x != null,
   );
+
+  const emitOdd = (event, marketId, value) => {
+    event.stopPropagation();
+    if (!value) return;
+    const selectionId = `${match.match}-${marketId.toUpperCase()}`;
+    onOddsClick?.({
+      id: selectionId,
+      apiFixtureId: match.apiFixtureId,
+      matchName: match.match,
+      league: match.league,
+      ...resolveCompactMarketToken(marketId),
+      value,
+      kickoffAt: match.kickoffAt,
+      matchStatus: match.status,
+      fromLive: false,
+    });
+  };
+
+  if (variant === "desktop") {
+    return (
+      <article
+        ref={rowRef}
+        className={`min-w-0 border-b border-(--sb-border) ${
+          isExpanded ? "bg-(--sb-bg-card-elevated)" : "bg-(--sb-bg-card)"
+        }`}
+      >
+        <div className="grid min-w-0 grid-cols-[140px_minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-2.5">
+          <button
+            type="button"
+            onClick={onToggle}
+            className="cursor-pointer border-0 bg-transparent text-left text-[11px] text-(--sb-text-muted)"
+          >
+            {formatDesktopKickoff(match.date, match.kickoffAt)}
+          </button>
+          <button
+            type="button"
+            onClick={onToggle}
+            className="min-w-0 cursor-pointer border-0 bg-transparent text-left"
+          >
+            <span className="block truncate text-[13px] font-medium text-white">
+              {home}
+            </span>
+            <span className="block truncate text-[13px] font-medium text-white">
+              {away}
+            </span>
+          </button>
+          <div className="flex items-center gap-2 text-(--sb-text-muted)">
+            <span className="text-[11px] font-bold">+{match.sideBets ?? 0}</span>
+            <AppIcon name="star" size={14} />
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            {selections.map((marketId) => {
+              const value = marketMap[marketId];
+              const selectionId = `${match.match}-${marketId.toUpperCase()}`;
+              return (
+                <DesktopOddButton
+                  key={`odd-${match.id}-${marketId}`}
+                  value={value ?? "-"}
+                  selected={selectedOdds?.has(selectionId)}
+                  onClick={(event) => emitOdd(event, marketId, value)}
+                />
+              );
+            })}
+          </div>
+        </div>
+        {children}
+      </article>
+    );
+  }
 
   return (
     <article
@@ -191,21 +299,7 @@ function MatchRow({
               label={oddsLabels[marketId]}
               value={value ?? "-"}
               selected={selectedOdds?.has(selectionId)}
-              onClick={(event) => {
-                event.stopPropagation();
-                if (!value) return;
-                onOddsClick?.({
-                  id: selectionId,
-                  apiFixtureId: match.apiFixtureId,
-                  matchName: match.match,
-                  league: match.league,
-                  ...resolveCompactMarketToken(marketId),
-                  value,
-                  kickoffAt: match.kickoffAt,
-                  matchStatus: match.status,
-                  fromLive: false,
-                });
-              }}
+              onClick={(event) => emitOdd(event, marketId, value)}
             />
           );
         })}
@@ -481,6 +575,7 @@ function MatchesTable({
   expandedMatchId,
   oddsDetailByFixtureId,
   marketTabId = DEFAULT_MARKET_TAB.id,
+  variant = "mobile",
 }) {
   const marketTab =
     MATCH_MARKET_TABS.find((tab) => tab.id === marketTabId) ||
@@ -553,7 +648,7 @@ function MatchesTable({
   }, [expandedMatchId]);
 
   return (
-    <Panel className="min-w-0 overflow-hidden rounded-none">
+    <Panel className={`min-w-0 overflow-hidden ${variant === "desktop" ? "rounded-b-xl rounded-t-none" : "rounded-none"}`}>
       <div className="min-w-0">
         {groupedMatches.map(([league, leagueMatches]) => {
           const head = leagueMatches[0];
@@ -563,8 +658,14 @@ function MatchesTable({
               className="min-w-0 overflow-hidden"
             >
               <header
-                className="flex items-center gap-2 px-2.5 py-1.5 text-[12px] font-bold text-white"
-                style={{ background: sportAccentColor(head?.sportId) }}
+                className={`flex items-center gap-2 px-2.5 py-1.5 text-[12px] font-bold text-white ${
+                  variant === "desktop" ? "bg-[#1a1a1a]" : ""
+                }`}
+                style={
+                  variant === "desktop"
+                    ? undefined
+                    : { background: sportAccentColor(head?.sportId) }
+                }
               >
                 {head?.countryFlag ? (
                   <LogoImg
@@ -606,6 +707,7 @@ function MatchesTable({
                       onOddsClick={onOddsClick}
                       selectedOdds={selectedOdds}
                       marketTab={marketTab}
+                      variant={variant}
                       rowRef={(el) => {
                         if (el) matchRowRefs.current.set(match.id, el);
                         else matchRowRefs.current.delete(match.id);

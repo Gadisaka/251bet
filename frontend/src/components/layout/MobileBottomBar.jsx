@@ -9,8 +9,8 @@ import { coerceStakeDisplayToLimits } from "../../utils/stakeLimits";
 import { useTranslation } from "../../i18n/LanguageContext.jsx";
 
 /**
- * Pinned five-item bar at every breakpoint — the desktop view of the reference
- * site keeps the same bar rather than moving the slip into a sidebar.
+ * Pinned five-item bar on small screens. Desktop hides the bar and opens the
+ * same slip sheet from the header control.
  */
 function MobileBottomBar({
   selections = [],
@@ -20,11 +20,15 @@ function MobileBottomBar({
   onSelectionClick,
   leaguesSidebarProps = null,
   liveCount = 0,
+  slipOpen: slipOpenProp,
+  onSlipOpenChange,
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const [slipOpen, setSlipOpen] = useState(false);
+  const [internalSlipOpen, setInternalSlipOpen] = useState(false);
+  const slipOpen = slipOpenProp ?? internalSlipOpen;
+  const setSlipOpen = onSlipOpenChange ?? setInternalSlipOpen;
   const [leaguesOpen, setLeaguesOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [stakeInput, setStakeInput] = useState("20");
@@ -54,7 +58,7 @@ function MobileBottomBar({
     (sel) => {
       if (sel?.apiFixtureId == null) return;
       setSlipOpen(false);
-      navigate("/", {
+      navigate("/sport", {
         state: {
           openFixtureId: sel.apiFixtureId,
           kickoffAt: sel.kickoffAt ?? null,
@@ -79,14 +83,17 @@ function MobileBottomBar({
       id: "sports",
       icon: "timer",
       label: t("mobileBar.sports"),
-      active: location.pathname === "/",
+      active: location.pathname === "/" || location.pathname === "/sport",
       // Already on the sportsbook: reuse the tab to browse leagues.
       onClick: () => {
-        if (location.pathname === "/" && mobileLeaguesSidebarProps) {
+        if (
+          (location.pathname === "/" || location.pathname === "/sport") &&
+          mobileLeaguesSidebarProps
+        ) {
           setLeaguesOpen(true);
           return;
         }
-        navigate("/");
+        navigate("/sport");
       },
     },
     {
@@ -135,7 +142,7 @@ function MobileBottomBar({
       />
       <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
-      <nav className="fixed inset-x-0 bottom-0 z-50 flex h-14 items-stretch border-t border-(--sb-border) bg-(--sb-bottom-bar)">
+      <nav className="fixed inset-x-0 bottom-0 z-50 flex h-14 items-stretch border-t border-(--sb-border) bg-(--sb-bottom-bar) lg:hidden">
         {items.map((item) => (
           <button
             key={item.id}
@@ -162,7 +169,7 @@ function MobileBottomBar({
           </button>
         ))}
       </nav>
-      <div className="h-14" />
+      <div className="h-14 lg:hidden" />
     </>
   );
 }
