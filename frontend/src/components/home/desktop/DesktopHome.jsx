@@ -5,11 +5,11 @@ import DesktopSuggestedBets from "./DesktopSuggestedBets";
 import DesktopTrending from "./DesktopTrending";
 import DesktopUpcoming from "./DesktopUpcoming";
 import MatchesPagination from "../../common/MatchesPagination";
-import { mockMultipleOfTheDay } from "../../../data/mockSportsbook";
 
 function DesktopHome({
   upcomingRef,
   suggestedMatches = [],
+  allMatches = [],
   sports = [],
   markets = [],
   selectedSportId,
@@ -43,7 +43,7 @@ function DesktopHome({
         selectedOdds={selectedOdds}
       />
       <DesktopMultiples
-        tickets={mockMultipleOfTheDay}
+        matches={allMatches}
         onLoadTicket={onLoadTicket}
       />
       <div ref={upcomingRef}>

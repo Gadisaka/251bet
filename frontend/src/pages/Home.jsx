@@ -535,6 +535,7 @@ function Home() {
                 <HomeDiscoverSections
                   popularMatches={popularMatches}
                   liveMatches={liveMatches}
+                  allMatches={allMatches}
                   onMoreLive={() => navigate("/live")}
                   onOddsClick={handleOddsClick}
                   selectedOdds={selectedOdds}
@@ -598,6 +599,7 @@ function Home() {
                 <DesktopHome
                   upcomingRef={upcomingRef}
                   suggestedMatches={suggestedMatches}
+                  allMatches={allMatches}
                   sports={toolbarSports}
                   markets={MATCH_MARKET_TABS}
                   selectedSportId={selectedSportId}

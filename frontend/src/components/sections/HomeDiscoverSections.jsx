@@ -4,7 +4,6 @@ import MatchesTable from "./MatchesTable";
 import DesktopMultiples from "../home/desktop/DesktopMultiples";
 import { sportAccentColor } from "../../utils/sportsbookDisplay";
 import { useTranslation } from "../../i18n/LanguageContext.jsx";
-import { mockMultipleOfTheDay } from "../../data/mockSportsbook";
 
 /** Centered muted copy used wherever a section has nothing to show. */
 function EmptyState({ children }) {
@@ -42,6 +41,7 @@ function LiveMatchRow({ match }) {
 function HomeDiscoverSections({
   popularMatches = [],
   liveMatches = [],
+  allMatches = [],
   onMoreLive,
   onMorePopular,
   onOddsClick,
@@ -72,7 +72,7 @@ function HomeDiscoverSections({
       </section>
 
       <DesktopMultiples
-        tickets={mockMultipleOfTheDay}
+        matches={allMatches}
         onLoadTicket={onLoadTicket}
       />
 

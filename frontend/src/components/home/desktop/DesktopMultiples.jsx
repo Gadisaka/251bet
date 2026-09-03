@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AppIcon from "../../common/AppIcon";
 import { hasAuthToken } from "../../../services/api";
+import { useActiveBonuses } from "../../../hooks/useActiveBonuses";
 import { useTranslation } from "../../../i18n/LanguageContext.jsx";
+import {
+  buildMultipleOfTheDayTickets,
+  ticketToSlipSelections,
+} from "../../../utils/multipleOfTheDay.js";
 
 function ticketOdds(legs) {
   return legs.reduce((acc, leg) => acc * Number(leg.value || 1), 1);
@@ -22,17 +27,6 @@ function displayMatch(match) {
 
 function displayMarket(market) {
   return String(market || "").replace(/\s+—\s+/g, " - ");
-}
-
-function ticketToSelections(ticket) {
-  return ticket.legs.map((leg) => ({
-    id: `${ticket.id}-${leg.id}`,
-    matchName: leg.match,
-    market: leg.market,
-    selection: leg.market,
-    value: String(leg.value),
-    kickoffAt: null,
-  }));
 }
 
 function MultipleCard({ ticket, onLoadTicket, fill = false }) {
@@ -56,7 +50,7 @@ function MultipleCard({ ticket, onLoadTicket, fill = false }) {
   };
 
   const loadTicket = () => {
-    onLoadTicket?.(ticketToSelections(ticket));
+    onLoadTicket?.(ticketToSlipSelections(ticket));
   };
 
   return (
@@ -77,7 +71,7 @@ function MultipleCard({ ticket, onLoadTicket, fill = false }) {
       ) : null}
 
       <p className="m-0 border-b border-white/10 pb-2 pr-20 text-[13px] font-semibold leading-snug text-[#d8d8d8]">
-        {ticket.title}
+        {ticket.titleKey ? t(ticket.titleKey) : ticket.title}
       </p>
 
       <ul className="m-0 max-h-[140px] flex-1 overflow-y-auto bg-black/20 px-0 py-2 [scrollbar-color:#8e8a83_transparent] [scrollbar-width:thin]">
@@ -190,11 +184,17 @@ function MultipleCard({ ticket, onLoadTicket, fill = false }) {
   );
 }
 
-function DesktopMultiples({ tickets = [], onLoadTicket, onMore }) {
+function DesktopMultiples({ matches = [], onLoadTicket, onMore }) {
   const { t } = useTranslation();
+  const { bonuses } = useActiveBonuses();
   const scrollerRef = useRef(null);
   const jumpingRef = useRef(false);
   const [centered, setCentered] = useState(true);
+
+  const tickets = useMemo(
+    () => buildMultipleOfTheDayTickets(matches, { bonuses }),
+    [matches, bonuses],
+  );
 
   const loopTickets = useMemo(() => {
     if (!tickets.length) return [];
@@ -267,22 +267,28 @@ function DesktopMultiples({ tickets = [], onLoadTicket, onMore }) {
           </button>
         ) : null}
       </div>
-      <div
-        ref={scrollerRef}
-        onScroll={handleScroll}
-        className={`flex gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
-          centered ? "w-full justify-center lg:justify-stretch" : ""
-        }`}
-      >
-        {loopTickets.map(({ ticket, key }) => (
-          <MultipleCard
-            key={key}
-            ticket={ticket}
-            onLoadTicket={onLoadTicket}
-            fill={centered}
-          />
-        ))}
-      </div>
+      {tickets.length === 0 ? (
+        <p className="m-0 py-10 text-center text-[12px] text-(--sb-text-muted)">
+          {t("home.noMultiples")}
+        </p>
+      ) : (
+        <div
+          ref={scrollerRef}
+          onScroll={handleScroll}
+          className={`flex gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+            centered ? "w-full justify-center lg:justify-stretch" : ""
+          }`}
+        >
+          {loopTickets.map(({ ticket, key }) => (
+            <MultipleCard
+              key={key}
+              ticket={ticket}
+              onLoadTicket={onLoadTicket}
+              fill={centered}
+            />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
