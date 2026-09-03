@@ -276,6 +276,31 @@ model Team {
   @@map("teams")
 }
 
+// Local API-Football logo catalogue. Filled by a one-shot ingest; runtime
+// matching is name+country only — we do not keep calling API-Football.
+model SportsLogo {
+  id                String    @id @default(uuid()) @map("_id")
+  kind              String
+  provider          String    @default("apifootball")
+  api_id            Int
+  name              String
+  name_fold         String
+  country           String?
+  country_fold      String?
+  logo              String
+  flag              String?
+  season            Int?
+  extra_names       String[]  @default([])
+  teams_ingested_at DateTime?
+  ingested_at       DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  @@unique([provider, kind, api_id])
+  @@index([kind, name_fold])
+  @@index([kind, name_fold, country_fold])
+  @@map("sports_logos")
+}
+
 model Fixture {
   id             String   @id @default(uuid()) @map("_id")
   api_fixture_id Int      @unique

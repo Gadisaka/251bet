@@ -14,6 +14,13 @@ import {
   searchTeam as searchTeamDefault,
   teamBadgeUrl,
 } from "../../services/providers/thesportsdb/client.js";
+import {
+  buildCatalogIndex,
+  loadCatalogEntries as loadCatalogEntriesDefault,
+  lookupCatalogHit as lookupCatalogHitDefault,
+  lookupInIndex,
+  patchFromHit,
+} from "../../services/providers/logoCatalog.js";
 
 const DEFAULT_BATCH = 40;
 const DEFAULT_SCAN = 400;
@@ -123,6 +130,9 @@ export async function runOddspapiSyncLogos({
   searchTeam = searchTeamDefault,
   lookupLeague = lookupLeagueDefault,
   deleteByPattern = deleteByPatternDefault,
+  loadCatalogEntries = loadCatalogEntriesDefault,
+  lookupCatalogHit = lookupCatalogHitDefault,
+  catalogEntries,
   now = Date.now(),
   enabled = isSofascoreLogosEnabled(),
 } = {}) {
@@ -156,6 +166,7 @@ export async function runOddspapiSyncLogos({
           id: true,
           name: true,
           country: true,
+          category_name: true,
           logo: true,
           logo_checked_at: true,
           sofascore_tournament_id: true,
@@ -201,7 +212,9 @@ export async function runOddspapiSyncLogos({
     }
   }
 
-  const candidates = rows.filter((row) => rowNeedsWork(row, now, backoffMs));
+  const catalog = catalogEntries
+    ? buildCatalogIndex(catalogEntries)
+    : null;
   const sofaCache = new Map();
   const teamSearchCache = new Map();
   const leagueLookupCache = new Map();
@@ -210,6 +223,7 @@ export async function runOddspapiSyncLogos({
   let updated = 0;
   let failed = 0;
   let sofaForbidden = 0;
+  let catalogHits = 0;
   let skippedNoId = rows.filter((row) => !sofascoreIdFromExternal(row.external_ids)).length;
 
   async function persistPatches(patches) {
@@ -221,6 +235,36 @@ export async function runOddspapiSyncLogos({
       if (ok && patch.logo) updated += 1;
     }
   }
+
+  async function resolveViaCatalog(row) {
+    const country = row.league?.country || row.league?.category_name;
+    const patches = [];
+    if (needsLogo(row.league, now, backoffMs)) {
+      const hit = catalog
+        ? lookupInIndex(catalog, "league", row.league?.name, country)
+        : await lookupCatalogHit(prisma, "league", row.league?.name, country);
+      const patch = patchFromHit(row.league, hit, { flag: true });
+      if (patch) patches.push(["league", row.league, patch]);
+    }
+    for (const team of [row.home_team, row.away_team]) {
+      if (!needsLogo(team, now, backoffMs)) continue;
+      const hit = catalog
+        ? lookupInIndex(catalog, "team", team?.name, country)
+        : await lookupCatalogHit(prisma, "team", team?.name, country);
+      const patch = patchFromHit(team, hit);
+      if (patch) patches.push(["team", team, patch]);
+    }
+    if (patches.length) {
+      catalogHits += patches.filter(([, , patch]) => patch.logo).length;
+      await persistPatches(patches);
+    }
+  }
+
+  for (const row of rows) {
+    if (rowNeedsWork(row, now, backoffMs)) await resolveViaCatalog(row);
+  }
+
+  const candidates = rows.filter((row) => rowNeedsWork(row, now, backoffMs));
 
   async function markMiss(row) {
     const failPatch = markPatch();
@@ -367,15 +411,16 @@ export async function runOddspapiSyncLogos({
     await invalidateLogoCaches(deleteByPattern);
   }
 
-  if (fetched || updated || tsdbCalls) {
+  if (fetched || updated || tsdbCalls || catalogHits) {
     console.log(
-      `[oddspapi:logos] scanned=${rows.length} candidates=${candidates.length} fetched=${fetched} tsdb=${tsdbCalls} updated=${updated} failed=${failed} noId=${skippedNoId}`,
+      `[oddspapi:logos] scanned=${rows.length} candidates=${candidates.length} catalog=${catalogHits} fetched=${fetched} tsdb=${tsdbCalls} updated=${updated} failed=${failed} noId=${skippedNoId}`,
     );
   }
 
   return {
     scanned: rows.length,
     candidates: candidates.length,
+    catalogHits,
     fetched,
     tsdbCalls,
     updated,
